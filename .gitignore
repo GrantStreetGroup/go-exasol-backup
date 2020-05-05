@@ -1,0 +1,9 @@
+_build/
+.build/
+build/
+blib/
+.*.sw?
+.nfs*
+*#
+.#*
+*~
