@@ -12,14 +12,15 @@ import (
 )
 
 type view struct {
-	schema string
-	view   string
-	scope  string
-	text   string
+	schema  string
+	name    string
+	scope   string
+	text    string
+	comment string
 }
 
 func (v *view) Schema() string { return v.schema }
-func (v *view) Name() string   { return v.view }
+func (v *view) Name() string   { return v.name }
 
 func BackupViews(src *exasol.Conn, dst string, crit Criteria, maxRows int, dropExtras bool) {
 	log.Notice("Backing up views")
@@ -38,7 +39,7 @@ func BackupViews(src *exasol.Conn, dst string, crit Criteria, maxRows int, dropE
 		os.MkdirAll(dir, os.ModePerm)
 		backupView(dir, v)
 		if shouldBackupViewData(src, v, maxRows) {
-			log.Noticef("Backing up view data for %s.%s", v.schema, v.view)
+			log.Noticef("Backing up view data for %s.%s", v.schema, v.name)
 			wg := &sync.WaitGroup{}
 			wg.Add(2)
 			data := make(chan []byte)
@@ -56,8 +57,9 @@ func getViewsToBackup(conn *exasol.Conn, crit Criteria) ([]*view, []dbObj) {
 		SELECT view_schema AS s,
 			   view_name   AS o,
 			   scope_schema,
-			   view_text
-		FROM exa_all_views
+			   view_text,
+			   view_comment
+		FROM exa_dba_views
 		WHERE %s
 		ORDER BY local.s, local.o
 		`, crit.getSQLCriteria(),
@@ -71,13 +73,16 @@ func getViewsToBackup(conn *exasol.Conn, crit Criteria) ([]*view, []dbObj) {
 	for _, row := range res {
 		v := &view{
 			schema: row[0].(string),
-			view:   row[1].(string),
+			name:   row[1].(string),
 			text:   row[3].(string),
 		}
 		if row[2] == nil {
 			v.scope = row[0].(string)
 		} else {
 			v.scope = row[2].(string)
+		}
+		if row[4] != nil {
+			v.comment = row[4].(string)
 		}
 		views = append(views, v)
 		dbObjs = append(dbObjs, v)
@@ -86,16 +91,19 @@ func getViewsToBackup(conn *exasol.Conn, crit Criteria) ([]*view, []dbObj) {
 }
 
 func backupView(dir string, v *view) {
-	log.Noticef("Backing up view %s.%s", v.schema, v.view)
+	log.Noticef("Backing up view %s.%s", v.schema, v.name)
 
 	// We have to swap out the name too because if the view got renamed
 	// the v.text still references the original name.
 	r := regexp.MustCompile(`^(?is).*?CREATE[^V]+?VIEW\s+("?[\w_-]+"?\.)?"?[\w_-]+"?`)
-	replacement := fmt.Sprintf(`CREATE OR REPLACE FORCE VIEW "%s"."%s"`, v.schema, v.view)
+	replacement := fmt.Sprintf(`CREATE OR REPLACE FORCE VIEW "%s"."%s"`, v.schema, v.name)
 	createView := r.ReplaceAllString(v.text, replacement)
 
 	sql := fmt.Sprintf("OPEN SCHEMA %s;\n%s;\n", v.scope, createView)
-	file := filepath.Join(dir, v.view+".sql")
+	if v.comment != "" {
+		sql += fmt.Sprintf("COMMENT ON VIEW %s IS '%s';\n", v.name, exasol.QuoteStr(v.comment))
+	}
+	file := filepath.Join(dir, v.name+".sql")
 
 	err := ioutil.WriteFile(file, []byte(sql), 0644)
 	if err != nil {
@@ -108,8 +116,8 @@ func shouldBackupViewData(conn *exasol.Conn, v *view, maxRows int) bool {
 		return false
 	}
 	sql := fmt.Sprintf(
-		`SELECT COUNT(*)FROM %s.%s`,
-		conn.QuoteIdent(v.schema), conn.QuoteIdent(v.view),
+		`SELECT COUNT(*) FROM %s.%s`,
+		conn.QuoteIdent(v.schema), conn.QuoteIdent(v.name),
 	)
 	res, err := conn.FetchSlice(sql)
 	if err != nil {
@@ -127,7 +135,7 @@ func readViewData(conn *exasol.Conn, v *view, data chan<- []byte, wg *sync.WaitG
 
 	exportSQL := fmt.Sprintf(
 		"EXPORT (SELECT * FROM %s.%s) INTO CSV AT '%%s' FILE 'data.csv'",
-		conn.QuoteIdent(v.schema), conn.QuoteIdent(v.view),
+		conn.QuoteIdent(v.schema), conn.QuoteIdent(v.name),
 	)
 	_, err := conn.StreamQuery(exportSQL, data)
 	if err != nil {
@@ -137,7 +145,7 @@ func readViewData(conn *exasol.Conn, v *view, data chan<- []byte, wg *sync.WaitG
 
 func writeViewData(dst string, v *view, data <-chan []byte, wg *sync.WaitGroup) {
 	defer func() { wg.Done() }()
-	fp := filepath.Join(dst, v.view+".csv")
+	fp := filepath.Join(dst, v.name+".csv")
 	f, err := os.Create(fp)
 	if err != nil {
 		log.Fatal("Unable to create file", fp, err)

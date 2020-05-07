@@ -1,5 +1,7 @@
 /*
 	This library backs up metadata (and optionally data) from an Exasol instance to text files
+
+	TODO: Backup priority groups
 */
 
 package backup

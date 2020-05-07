@@ -10,13 +10,14 @@ import (
 )
 
 type function struct {
-	schema   string
-	function string
-	text     string
+	schema  string
+	name    string
+	text    string
+	comment string
 }
 
 func (f *function) Schema() string { return f.schema }
-func (f *function) Name() string   { return f.function }
+func (f *function) Name() string   { return f.name }
 
 func BackupFunctions(src *exasol.Conn, dst string, crit Criteria, dropExtras bool) {
 	log.Notice("Backing up functions")
@@ -43,8 +44,9 @@ func getFunctionsToBackup(conn *exasol.Conn, crit Criteria) ([]*function, []dbOb
 	sql := fmt.Sprintf(`
 		SELECT function_schema AS s,
 			   function_name   AS o,
-			   function_text
-		FROM exa_all_functions
+			   function_text,
+			   function_comment
+		FROM exa_dba_functions
 		WHERE %s
 		ORDER BY local.s, local.o
 		`, crit.getSQLCriteria(),
@@ -57,9 +59,12 @@ func getFunctionsToBackup(conn *exasol.Conn, crit Criteria) ([]*function, []dbOb
 	dbObjs := []dbObj{}
 	for _, row := range res {
 		f := &function{
-			schema:   row[0].(string),
-			function: row[1].(string),
-			text:     row[2].(string),
+			schema: row[0].(string),
+			name:   row[1].(string),
+			text:   row[2].(string),
+		}
+		if row[3] != nil {
+			f.comment = row[3].(string)
 		}
 		functions = append(functions, f)
 		dbObjs = append(dbObjs, f)
@@ -68,10 +73,13 @@ func getFunctionsToBackup(conn *exasol.Conn, crit Criteria) ([]*function, []dbOb
 }
 
 func createFunction(dst string, f *function) {
-	log.Noticef("Backing up function %s.%s", f.schema, f.function)
+	log.Noticef("Backing up function %s.%s", f.schema, f.name)
 	createFunction := "CREATE OR REPLACE " + f.text
 	sql := fmt.Sprintf("OPEN SCHEMA %s;\n--/\n%s;\n", f.schema, createFunction)
-	file := filepath.Join(dst, f.function+".sql")
+	if f.comment != "" {
+		sql += fmt.Sprintf("COMMENT ON FUNCTION %s IS '%s';\n", f.name, exasol.QuoteStr(f.comment))
+	}
+	file := filepath.Join(dst, f.name+".sql")
 	err := ioutil.WriteFile(file, []byte(sql), 0644)
 	if err != nil {
 		log.Fatal("Unable to backup function", sql, err)

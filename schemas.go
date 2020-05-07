@@ -12,7 +12,8 @@ import (
 // This backsup schemas (needed if they are empty)
 
 type schema struct {
-	name string
+	name    string
+	comment string
 }
 
 func (s *schema) Schema() string { return s.name }
@@ -43,7 +44,8 @@ func BackupSchemas(src *exasol.Conn, dst string, crit Criteria, dropExtras bool)
 func getSchemasToBackup(conn *exasol.Conn, crit Criteria) ([]*schema, []dbObj) {
 	sql := fmt.Sprintf(`
 		SELECT schema_name AS s,
-			   schema_name AS o
+			   schema_name AS o,
+			   schema_comment
 		FROM exa_schemas
 		WHERE %s
 		ORDER BY local.s
@@ -57,6 +59,9 @@ func getSchemasToBackup(conn *exasol.Conn, crit Criteria) ([]*schema, []dbObj) {
 	dbObjs := []dbObj{}
 	for _, row := range res {
 		s := &schema{name: row[0].(string)}
+		if row[2] != nil {
+			s.comment = row[2].(string)
+		}
 		schemas = append(schemas, s)
 		dbObjs = append(dbObjs, s)
 	}
@@ -66,6 +71,9 @@ func getSchemasToBackup(conn *exasol.Conn, crit Criteria) ([]*schema, []dbObj) {
 func createSchema(dst string, s *schema) {
 	log.Noticef("Backing up schema %s", s.name)
 	sql := fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %s;\n", s.name)
+	if s.comment != "" {
+		sql += fmt.Sprintf("COMMENT ON SCHEMA %s IS '%s';\n", s.name, exasol.QuoteStr(s.comment))
+	}
 
 	dir := filepath.Join(dst, s.name)
 	os.MkdirAll(dir, os.ModePerm)

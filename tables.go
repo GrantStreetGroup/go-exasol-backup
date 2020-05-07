@@ -16,11 +16,12 @@ import (
 
 type table struct {
 	schema      string
-	table       string
+	name        string
 	rowCount    float64
 	columns     []*column
 	constraints []*constraint
 	data        chan []byte
+	comment     string
 }
 
 type column struct {
@@ -38,7 +39,7 @@ type constraint struct {
 }
 
 func (t *table) Schema() string { return t.schema }
-func (t *table) Name() string   { return t.table }
+func (t *table) Name() string   { return t.name }
 
 func BackupTables(src *exasol.Conn, dst string, crit Criteria, maxRows int, dropExtras bool) {
 	log.Notice("Backing up tables")
@@ -77,7 +78,7 @@ func readTables(conn *exasol.Conn, out chan<- *table, crit Criteria, maxRows int
 }
 
 func readTable(conn *exasol.Conn, t *table, out chan<- *table, maxRows int) {
-	log.Noticef("Backing up %s.%s", t.schema, t.table)
+	log.Noticef("Backing up %s.%s", t.schema, t.name)
 	if t.rowCount == 0 || t.rowCount > float64(maxRows) {
 		out <- t
 		return
@@ -117,8 +118,11 @@ func readTable(conn *exasol.Conn, t *table, out chan<- *table, maxRows int) {
 
 func getTablesToBackup(conn *exasol.Conn, crit Criteria) ([]*table, []dbObj) {
 	sql := fmt.Sprintf(`
-		SELECT table_schema AS s, table_name AS o, table_row_count
-		FROM exa_all_tables
+		SELECT table_schema AS s,
+			   table_name AS o,
+			   table_row_count,
+			   table_comment
+		FROM exa_dba_tables
 		WHERE %s
 		ORDER BY table_schema, table_name
 		`, crit.getSQLCriteria(),
@@ -132,10 +136,13 @@ func getTablesToBackup(conn *exasol.Conn, crit Criteria) ([]*table, []dbObj) {
 	for _, row := range res {
 		t := &table{
 			schema: row[0].(string),
-			table:  row[1].(string),
+			name:   row[1].(string),
 		}
 		if row[2] != nil {
 			t.rowCount = row[2].(float64)
+		}
+		if row[3] != nil {
+			t.comment = row[3].(string)
 		}
 		tables = append(tables, t)
 		dbObjs = append(dbObjs, t)
@@ -150,7 +157,7 @@ func addTableColumns(conn *exasol.Conn, tables []*table, crit Criteria) {
 			   column_name,    column_type,
 			   column_default, column_identity,
 			   column_comment
-		FROM exa_all_columns
+		FROM exa_dba_columns
 		WHERE column_object_type = 'TABLE'
 		  AND (%s)
 		ORDER BY column_schema, column_table, column_ordinal_position
@@ -180,7 +187,7 @@ func addTableColumns(conn *exasol.Conn, tables []*table, crit Criteria) {
 		var table *table
 		for _, t := range tables {
 			if t.schema == schemaName &&
-				t.table == tableName {
+				t.name == tableName {
 				table = t
 				break
 			}
@@ -200,7 +207,7 @@ func addTableConstraints(conn *exasol.Conn, tables []*table, crit Criteria) {
 			   con.constraint_type,
 			   con.constraint_enabled,
 			   cols.columns
-		FROM exa_all_constraints AS con
+		FROM exa_dba_constraints AS con
 		JOIN (
 			SELECT constraint_schema AS s,
 				   constraint_table  AS o,
@@ -210,7 +217,7 @@ func addTableConstraints(conn *exasol.Conn, tables []*table, crit Criteria) {
 					   ORDER BY ordinal_position
 					   SEPARATOR ','
 				   ) AS columns
-		    FROM exa_all_constraint_columns
+		    FROM exa_dba_constraint_columns
 			WHERE %s
 			GROUP BY local.s, local.o, constraint_name
 		) AS cols USING(constraint_name)
@@ -236,7 +243,7 @@ func addTableConstraints(conn *exasol.Conn, tables []*table, crit Criteria) {
 		var table *table
 		for _, t := range tables {
 			if t.schema == schemaName &&
-				t.table == tableName {
+				t.name == tableName {
 				table = t
 				break
 			}
@@ -306,9 +313,12 @@ func createTable(dir string, t *table) {
 
 	sql := fmt.Sprintf(
 		"CREATE OR REPLACE TABLE \"%s\".\"%s\" (\n\t%s\n);\n",
-		t.schema, t.table, strings.Join(cols, ",\n\t"),
+		t.schema, t.name, strings.Join(cols, ",\n\t"),
 	)
-	file := filepath.Join(dir, t.table+".sql")
+	if t.comment != "" {
+		sql += fmt.Sprintf("COMMENT ON TABLE %s IS '%s';\n", t.name, exasol.QuoteStr(t.comment))
+	}
+	file := filepath.Join(dir, t.name+".sql")
 
 	err := ioutil.WriteFile(file, []byte(sql), 0644)
 	if err != nil {
@@ -320,7 +330,7 @@ func writeTableData(dir string, t *table, maxRows int) {
 	if t.rowCount == 0 || t.rowCount > float64(maxRows) {
 		return
 	}
-	fp := filepath.Join(dir, t.table+".csv")
+	fp := filepath.Join(dir, t.name+".csv")
 	f, err := os.Create(fp)
 	if err != nil {
 		log.Fatal("Unable to create file", fp, err)
@@ -335,5 +345,5 @@ func writeTableData(dir string, t *table, maxRows int) {
 }
 
 func (t *table) qTable() string {
-	return fmt.Sprintf("[%s]", t.table)
+	return fmt.Sprintf("[%s]", t.name)
 }
