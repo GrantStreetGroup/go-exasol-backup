@@ -75,9 +75,9 @@ func getFunctionsToBackup(conn *exasol.Conn, crit Criteria) ([]*function, []dbOb
 func createFunction(dst string, f *function) {
 	log.Noticef("Backing up function %s.%s", f.schema, f.name)
 	createFunction := "CREATE OR REPLACE " + f.text
-	sql := fmt.Sprintf("OPEN SCHEMA %s;\n--/\n%s;\n", f.schema, createFunction)
+	sql := fmt.Sprintf("OPEN SCHEMA [%s];\n--/\n%s;\n", f.schema, createFunction)
 	if f.comment != "" {
-		sql += fmt.Sprintf("COMMENT ON FUNCTION %s IS '%s';\n", f.name, exasol.QuoteStr(f.comment))
+		sql += fmt.Sprintf("COMMENT ON FUNCTION [%s] IS '%s';\n", f.name, qStr(f.comment))
 	}
 	file := filepath.Join(dst, f.name+".sql")
 	err := ioutil.WriteFile(file, []byte(sql), 0644)

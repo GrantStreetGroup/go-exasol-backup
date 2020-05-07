@@ -81,7 +81,7 @@ func createRole(dst string, r *role) {
 		sql += fmt.Sprintf("GRANT PRIORITY %s TO %s;\n", r.priority, r.name)
 	}
 	if r.comment != "" {
-		sql += fmt.Sprintf("COMMENT ON ROLE %s IS '%s';\n", r.name, exasol.QuoteStr(r.comment))
+		sql += fmt.Sprintf("COMMENT ON ROLE %s IS '%s';\n", r.name, qStr(r.comment))
 	}
 
 	file := filepath.Join(dst, r.name+".sql")

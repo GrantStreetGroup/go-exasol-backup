@@ -225,7 +225,7 @@ func buildCriteria(argStr string) string {
 		criteria := fmt.Sprintf(`(
 				UPPER(local.s) LIKE UPPER('%s') AND
 				UPPER(local.o) LIKE UPPER('%s')
-			)`, schema, object,
+			)`, qStr(schema), qStr(object),
 		)
 		whereClause = append(whereClause, criteria)
 	}
@@ -290,12 +290,12 @@ SCHEMA:
 func openSchema(conn *exasol.Conn, schema string) {
 	conn.Conf.SuppressError = true
 
-	openSchema := fmt.Sprintf("OPEN SCHEMA %s", schema)
+	openSchema := fmt.Sprintf("OPEN SCHEMA [%s]", schema)
 	_, err := conn.Execute(openSchema)
 	if err != nil {
 		if regexp.MustCompile(`schema .* not found`).MatchString(err.Error()) {
 
-			createSchema := fmt.Sprintf("CREATE SCHEMA %s", schema)
+			createSchema := fmt.Sprintf("CREATE SCHEMA [%s]", schema)
 			_, err = conn.Execute(createSchema)
 			if err != nil {
 				log.Fatal("Unable to create schema", createSchema, err)
@@ -311,4 +311,8 @@ func openSchema(conn *exasol.Conn, schema string) {
 		}
 	}
 	conn.Conf.SuppressError = false
+}
+
+func qStr(str string) string {
+	return exasol.QuoteStr(str)
 }

@@ -293,7 +293,7 @@ func createTable(dir string, t *table) {
 			}
 		}
 		if c.comment != "" {
-			col += fmt.Sprintf(" COMMENT IS '%s'", exasol.QuoteStr(c.comment))
+			col += fmt.Sprintf(" COMMENT IS '%s'", qStr(c.comment))
 		}
 		cols = append(cols, col)
 	}
@@ -318,7 +318,7 @@ func createTable(dir string, t *table) {
 		t.schema, t.name, strings.Join(cols, ",\n\t"),
 	)
 	if t.comment != "" {
-		sql += fmt.Sprintf("COMMENT ON TABLE %s IS '%s';\n", t.name, exasol.QuoteStr(t.comment))
+		sql += fmt.Sprintf("COMMENT ON TABLE [%s] IS '%s';\n", t.name, qStr(t.comment))
 	}
 	file := filepath.Join(dir, t.name+".sql")
 

@@ -133,19 +133,19 @@ func createSchema(dst string, s *schema) {
 		if len(s.vSchemaProps) > 0 {
 			props = "\nWITH"
 			for _, p := range s.vSchemaProps {
-				props += fmt.Sprintf("\n  %s = '%s'", p.name, exasol.QuoteStr(p.value))
+				props += fmt.Sprintf("\n  %s = '%s'", p.name, qStr(p.value))
 			}
 		}
 		sql = fmt.Sprintf(
-			"CREATE VIRTUAL SCHEMA IF NOT EXISTS %s\nUSING %s%s;\n",
+			"CREATE VIRTUAL SCHEMA IF NOT EXISTS [%s]\nUSING %s%s;\n",
 			s.name, s.adapter, props,
 		)
 	} else {
-		sql = fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %s;\n", s.name)
+		sql = fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS [%s];\n", s.name)
 	}
 
 	if s.comment != "" {
-		sql += fmt.Sprintf("COMMENT ON SCHEMA %s IS '%s';\n", s.name, exasol.QuoteStr(s.comment))
+		sql += fmt.Sprintf("COMMENT ON SCHEMA [%s] IS '%s';\n", s.name, qStr(s.comment))
 	}
 
 	dir := filepath.Join(dst, s.name)

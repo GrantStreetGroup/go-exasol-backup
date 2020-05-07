@@ -101,7 +101,7 @@ func backupUser(dst string, u *user) {
 	}
 
 	if u.comment != "" {
-		sql += fmt.Sprintf("COMMENT ON USER %s IS '%s';\n", u.name, exasol.QuoteStr(u.comment))
+		sql += fmt.Sprintf("COMMENT ON USER %s IS '%s';\n", u.name, qStr(u.comment))
 	}
 
 	file := filepath.Join(dst, u.name+".sql")

@@ -75,13 +75,13 @@ func getConnectionsToBackup(conn *exasol.Conn) []*connection {
 func createConnection(c *connection) string {
 	log.Noticef("Backing up connection %s", c.name)
 	sql := fmt.Sprintf(
-		"CREATE CONNECTION %s TO '%s' USER '%s' IDENTIFIED BY '';\n",
-		c.name, c.connStr, c.username,
+		"CREATE CONNECTION [%s] TO '%s' USER '%s' IDENTIFIED BY ********;\n",
+		c.name, qStr(c.connStr), c.username,
 	)
 	if c.comment != "" {
 		sql += fmt.Sprintf(
-			"COMMENT ON CONNECTION %s IS '%s';\n",
-			c.name, exasol.QuoteStr(c.comment),
+			"COMMENT ON CONNECTION [%s] IS '%s';\n",
+			c.name, qStr(c.comment),
 		)
 	}
 	return sql

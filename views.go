@@ -99,9 +99,9 @@ func backupView(dir string, v *view) {
 	replacement := fmt.Sprintf(`CREATE OR REPLACE FORCE VIEW "%s"."%s"`, v.schema, v.name)
 	createView := r.ReplaceAllString(v.text, replacement)
 
-	sql := fmt.Sprintf("OPEN SCHEMA %s;\n%s;\n", v.scope, createView)
+	sql := fmt.Sprintf("OPEN SCHEMA [%s];\n%s;\n", v.scope, createView)
 	if v.comment != "" {
-		sql += fmt.Sprintf("COMMENT ON VIEW %s IS '%s';\n", v.name, exasol.QuoteStr(v.comment))
+		sql += fmt.Sprintf("COMMENT ON VIEW [%s] IS '%s';\n", v.name, qStr(v.comment))
 	}
 	file := filepath.Join(dir, v.name+".sql")
 
@@ -115,10 +115,7 @@ func shouldBackupViewData(conn *exasol.Conn, v *view, maxRows int) bool {
 	if maxRows == 0 {
 		return false
 	}
-	sql := fmt.Sprintf(
-		`SELECT COUNT(*) FROM %s.%s`,
-		conn.QuoteIdent(v.schema), conn.QuoteIdent(v.name),
-	)
+	sql := fmt.Sprintf(`SELECT COUNT(*) FROM [%s].[%s]`, v.schema, v.name)
 	res, err := conn.FetchSlice(sql)
 	if err != nil {
 		log.Fatal(err)
@@ -134,8 +131,8 @@ func readViewData(conn *exasol.Conn, v *view, data chan<- []byte, wg *sync.WaitG
 	}()
 
 	exportSQL := fmt.Sprintf(
-		"EXPORT (SELECT * FROM %s.%s) INTO CSV AT '%%s' FILE 'data.csv'",
-		conn.QuoteIdent(v.schema), conn.QuoteIdent(v.name),
+		"EXPORT (SELECT * FROM [%s].[%s]) INTO CSV AT '%%s' FILE 'data.csv'",
+		v.schema, v.name,
 	)
 	_, err := conn.StreamQuery(exportSQL, data)
 	if err != nil {

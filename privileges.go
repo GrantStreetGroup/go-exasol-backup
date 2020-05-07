@@ -40,7 +40,7 @@ func backupConnectionPrivs(src *exasol.Conn, dst string, grantees []string) {
 		grantee := row[0].(string)
 		connection := row[1].(string)
 		adminOption := row[2].(bool)
-		sql := fmt.Sprintf("GRANT CONNECTION %s TO %s", connection, grantee)
+		sql := fmt.Sprintf("GRANT CONNECTION [%s] TO %s", connection, grantee)
 		if adminOption {
 			sql += " WITH ADMIN OPTION"
 		}
@@ -72,10 +72,10 @@ func backupObjectPrivs(src *exasol.Conn, dst string, grantees []string) {
 		if objType == "SCHEMA" {
 			object = row[1].(string)
 		} else {
-			object = row[0].(string) + "." + row[1].(string)
+			object = row[0].(string) + "].[" + row[1].(string)
 		}
 
-		sql := fmt.Sprintf("GRANT %s ON %s %s TO %s;\n", privilege, objType, object, grantee)
+		sql := fmt.Sprintf("GRANT %s ON %s [%s] TO %s;\n", privilege, objType, object, grantee)
 		appendToObjFile(dst, grantee, sql)
 	}
 }
@@ -105,17 +105,17 @@ func backupRestrictedObjectPrivs(src *exasol.Conn, dst string, grantees []string
 		if row[0] == nil {
 			object = row[1].(string)
 		} else {
-			object = row[0].(string) + `"."` + row[1].(string)
+			object = row[0].(string) + `"].["` + row[1].(string)
 		}
 		var forObject string
 		if row[3] == nil {
 			forObject = row[4].(string)
 		} else {
-			forObject = row[3].(string) + `"."` + row[4].(string)
+			forObject = row[3].(string) + `"].["` + row[4].(string)
 		}
 
 		sql := fmt.Sprintf(
-			`GRANT %s ON %s "%s" FOR %s "%s" TO "%s";`+"\n",
+			`GRANT %s ON %s [%s] FOR %s [%s] TO %s;`+"\n",
 			privilege, objType, object, forObjType, forObject, grantee,
 		)
 		appendToObjFile(dst, grantee, sql)
@@ -201,7 +201,7 @@ func backupSchemaOwners(src *exasol.Conn, dst string, grantees []string) {
 			virtual = "VIRTUAL "
 		}
 
-		sql := fmt.Sprintf("ALTER %sSCHEMA %s CHANGE OWNER %s;\n", virtual, schema, owner)
+		sql := fmt.Sprintf("ALTER %sSCHEMA [%s] CHANGE OWNER %s;\n", virtual, schema, owner)
 		appendToObjFile(dst, owner, sql)
 	}
 }
