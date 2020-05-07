@@ -1,9 +1,5 @@
 /*
 	This library backs up metadata (and optionally data) from an Exasol instance to text files
-
-	TODO:
-		- Backup priority groups
-		- Backup schema raw size limits
 */
 
 package backup
@@ -42,7 +38,7 @@ const (
 
 type Conf struct {
 	// Exasol instance to backup from
-	ExaConn *exasol.Conn
+	Source *exasol.Conn
 
 	// Local filesystem directory underwhich to store the backup
 	Destination string
@@ -79,15 +75,18 @@ type Conf struct {
 }
 
 func Backup(cfg Conf) error {
-	initLogging(cfg.LogLevel)
+	err := initLogging(cfg.LogLevel)
+	if err != nil {
+		return err
+	}
 	log.Noticef("Backing up to %s", cfg.Destination)
 
 	// Set defaults
 	if cfg.Match == "" {
 		cfg.Match = "*.*"
 	}
-	if cfg.ExaConn == nil {
-		return errors.New("You must specify an ExaConn")
+	if cfg.Source == nil {
+		return errors.New("You must specify a source Exasol connection")
 	}
 	if cfg.Destination == "" {
 		return errors.New("You must specify a Destination")
@@ -101,7 +100,7 @@ func Backup(cfg Conf) error {
 	for _, o := range cfg.Objects {
 		backup[o] = true
 	}
-	src := cfg.ExaConn
+	src := cfg.Source
 	dst := cfg.Destination
 	drop := cfg.DropExtras
 	crit := Criteria{cfg.Match, cfg.Skip}
@@ -111,31 +110,58 @@ func Backup(cfg Conf) error {
 	src.Execute("ALTER SESSION SET NLS_TIMESTAMP_FORMAT='YYYY-MM-DD HH24:MI:SS.FF3'")
 
 	if backup[PARAMETERS] || backup[ALL] {
-		BackupParameters(src, dst)
+		err := BackupParameters(src, dst)
+		if err != nil {
+			return err
+		}
 	}
 	if backup[SCHEMAS] || backup[ALL] {
-		BackupSchemas(src, dst, crit, drop)
+		err := BackupSchemas(src, dst, crit, drop)
+		if err != nil {
+			return err
+		}
 	}
 	if backup[TABLES] || backup[ALL] {
-		BackupTables(src, dst, crit, cfg.MaxTableRows, drop)
+		err := BackupTables(src, dst, crit, cfg.MaxTableRows, drop)
+		if err != nil {
+			return err
+		}
 	}
 	if backup[VIEWS] || backup[ALL] {
-		BackupViews(src, dst, crit, cfg.MaxViewRows, drop)
+		err := BackupViews(src, dst, crit, cfg.MaxViewRows, drop)
+		if err != nil {
+			return err
+		}
 	}
 	if backup[SCRIPTS] || backup[ALL] {
-		BackupScripts(src, dst, crit, drop)
+		err := BackupScripts(src, dst, crit, drop)
+		if err != nil {
+			return err
+		}
 	}
 	if backup[FUNCTIONS] || backup[ALL] {
-		BackupFunctions(src, dst, crit, drop)
+		err := BackupFunctions(src, dst, crit, drop)
+		if err != nil {
+			return err
+		}
 	}
 	if backup[CONNECTIONS] || backup[ALL] {
-		BackupConnections(src, dst)
+		err := BackupConnections(src, dst)
+		if err != nil {
+			return err
+		}
 	}
 	if backup[ROLES] || backup[ALL] {
-		BackupRoles(src, dst, drop)
+		err := BackupRoles(src, dst, drop)
+		if err != nil {
+			return err
+		}
 	}
 	if backup[USERS] || backup[ALL] {
-		BackupUsers(src, dst, drop)
+		err := BackupUsers(src, dst, drop)
+		if err != nil {
+			return err
+		}
 	}
 
 	log.Notice("Done backing up")
@@ -154,13 +180,13 @@ type dbObj interface {
 	Schema() string
 }
 
-func initLogging(logLevelStr string) {
+func initLogging(logLevelStr string) error {
 	if logLevelStr == "" {
-		logLevelStr = "error"
+		logLevelStr = "warning"
 	}
 	logLevel, err := logging.LogLevel(logLevelStr)
 	if err != nil {
-		log.Fatal("Unrecognized log level", err)
+		return fmt.Errorf("Unrecognized log level: %s", err)
 	}
 	logFormat := logging.MustStringFormatter(
 		"%{color}%{time:15:04:05.000} %{shortfunc}: " +
@@ -171,6 +197,8 @@ func initLogging(logLevelStr string) {
 	leveledBackend := logging.AddModuleLevel(formattedBackend)
 	leveledBackend.SetLevel(logLevel, "exasol-backup")
 	log.SetBackend(leveledBackend)
+
+	return nil
 }
 
 func (c *Criteria) getSQLCriteria() string {
@@ -285,32 +313,6 @@ SCHEMA:
 			}
 		}
 	}
-}
-
-func openSchema(conn *exasol.Conn, schema string) {
-	conn.Conf.SuppressError = true
-
-	openSchema := fmt.Sprintf("OPEN SCHEMA [%s]", schema)
-	_, err := conn.Execute(openSchema)
-	if err != nil {
-		if regexp.MustCompile(`schema .* not found`).MatchString(err.Error()) {
-
-			createSchema := fmt.Sprintf("CREATE SCHEMA [%s]", schema)
-			_, err = conn.Execute(createSchema)
-			if err != nil {
-				log.Fatal("Unable to create schema", createSchema, err)
-			}
-
-			_, err = conn.Execute(openSchema)
-			if err != nil {
-				log.Fatal("Unable to open schema", openSchema, err)
-			}
-
-		} else {
-			log.Fatal("Unable to open schema", openSchema, err)
-		}
-	}
-	conn.Conf.SuppressError = false
 }
 
 func qStr(str string) string {

@@ -18,13 +18,16 @@ type connection struct {
 	comment  string
 }
 
-func BackupConnections(src *exasol.Conn, dst string) {
+func BackupConnections(src *exasol.Conn, dst string) error {
 	log.Notice("Backing up connections")
 
-	connections := getConnectionsToBackup(src)
+	connections, err := getConnectionsToBackup(src)
+	if err != nil {
+		return err
+	}
 	if len(connections) == 0 {
 		log.Warning("No connections found")
-		return
+		return nil
 	}
 
 	var sql string
@@ -33,15 +36,16 @@ func BackupConnections(src *exasol.Conn, dst string) {
 	}
 	os.MkdirAll(dst, os.ModePerm)
 	file := filepath.Join(dst, "connections.sql")
-	err := ioutil.WriteFile(file, []byte(sql), 0644)
+	err = ioutil.WriteFile(file, []byte(sql), 0644)
 	if err != nil {
-		log.Fatal("Unable to backup parameters", sql, err)
+		return fmt.Errorf("Unable to backup connections: %s", err)
 	}
 
 	log.Info("Done backing up connections")
+	return nil
 }
 
-func getConnectionsToBackup(conn *exasol.Conn) []*connection {
+func getConnectionsToBackup(conn *exasol.Conn) ([]*connection, error) {
 	sql := fmt.Sprintf(`
 		SELECT connection_name AS s,
 			   connection_name AS o,
@@ -53,7 +57,7 @@ func getConnectionsToBackup(conn *exasol.Conn) []*connection {
 	)
 	res, err := conn.FetchSlice(sql)
 	if err != nil {
-		log.Fatal(err)
+		return nil, fmt.Errorf("Unable to get connections to backup: %s", err)
 	}
 	connections := []*connection{}
 	for _, row := range res {
@@ -69,7 +73,7 @@ func getConnectionsToBackup(conn *exasol.Conn) []*connection {
 		}
 		connections = append(connections, c)
 	}
-	return connections
+	return connections, nil
 }
 
 func createConnection(c *connection) string {
@@ -85,5 +89,4 @@ func createConnection(c *connection) string {
 		)
 	}
 	return sql
-
 }

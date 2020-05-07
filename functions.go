@@ -19,28 +19,35 @@ type function struct {
 func (f *function) Schema() string { return f.schema }
 func (f *function) Name() string   { return f.name }
 
-func BackupFunctions(src *exasol.Conn, dst string, crit Criteria, dropExtras bool) {
+func BackupFunctions(src *exasol.Conn, dst string, crit Criteria, dropExtras bool) error {
 	log.Notice("Backing up functions")
 
-	allFuncs, dbObjs := getFunctionsToBackup(src, crit)
+	allFuncs, dbObjs, err := getFunctionsToBackup(src, crit)
+	if err != nil {
+		return err
+	}
 	if dropExtras {
 		removeExtraObjects("functions", dbObjs, dst, crit)
 	}
 
 	if len(allFuncs) == 0 {
 		log.Warning("Object criteria did not match any functions")
-		return
+		return nil
 	}
 
 	for _, f := range allFuncs {
 		dir := filepath.Join(dst, "schemas", f.schema, "functions")
 		os.MkdirAll(dir, os.ModePerm)
-		createFunction(dir, f)
+		err = createFunction(dir, f)
+		if err != nil {
+			return err
+		}
 	}
 	log.Info("Done backing up functions")
+	return nil
 }
 
-func getFunctionsToBackup(conn *exasol.Conn, crit Criteria) ([]*function, []dbObj) {
+func getFunctionsToBackup(conn *exasol.Conn, crit Criteria) ([]*function, []dbObj, error) {
 	sql := fmt.Sprintf(`
 		SELECT function_schema AS s,
 			   function_name   AS o,
@@ -53,7 +60,7 @@ func getFunctionsToBackup(conn *exasol.Conn, crit Criteria) ([]*function, []dbOb
 	)
 	res, err := conn.FetchSlice(sql)
 	if err != nil {
-		log.Fatal(err)
+		return nil, nil, fmt.Errorf("Unable to get functions to backup: %s", err)
 	}
 	functions := []*function{}
 	dbObjs := []dbObj{}
@@ -69,10 +76,10 @@ func getFunctionsToBackup(conn *exasol.Conn, crit Criteria) ([]*function, []dbOb
 		functions = append(functions, f)
 		dbObjs = append(dbObjs, f)
 	}
-	return functions, dbObjs
+	return functions, dbObjs, nil
 }
 
-func createFunction(dst string, f *function) {
+func createFunction(dst string, f *function) error {
 	log.Noticef("Backing up function %s.%s", f.schema, f.name)
 	createFunction := "CREATE OR REPLACE " + f.text
 	sql := fmt.Sprintf("OPEN SCHEMA [%s];\n--/\n%s;\n", f.schema, createFunction)
@@ -82,6 +89,7 @@ func createFunction(dst string, f *function) {
 	file := filepath.Join(dst, f.name+".sql")
 	err := ioutil.WriteFile(file, []byte(sql), 0644)
 	if err != nil {
-		log.Fatal("Unable to backup function", sql, err)
+		return fmt.Errorf("Unable to backup function: %s", err)
 	}
+	return nil
 }

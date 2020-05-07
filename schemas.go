@@ -27,31 +27,41 @@ type vSchemaProp struct {
 func (s *schema) Schema() string { return s.name }
 func (s *schema) Name() string   { return "" }
 
-func BackupSchemas(src *exasol.Conn, dst string, crit Criteria, dropExtras bool) {
+func BackupSchemas(src *exasol.Conn, dst string, crit Criteria, dropExtras bool) error {
 	log.Noticef("Backing up schemas")
 
-	schemas, dbObjs := getSchemasToBackup(src, crit)
+	schemas, dbObjs, err := getSchemasToBackup(src, crit)
+	if err != nil {
+		return err
+	}
 	if dropExtras {
 		removeExtraObjects("schemas", dbObjs, dst, crit)
 	}
 
 	if len(schemas) == 0 {
 		log.Warning("Object criteria did not match any schemas")
-		return
+		return nil
 	}
 
-	addVirtualSchemaProps(src, schemas, crit)
+	err = addVirtualSchemaProps(src, schemas, crit)
+	if err != nil {
+		return err
+	}
 
 	dir := filepath.Join(dst, "schemas")
 	os.MkdirAll(dir, os.ModePerm)
 	for _, schema := range schemas {
-		createSchema(dir, schema)
+		err = createSchema(dir, schema)
+		if err != nil {
+			return err
+		}
 	}
 
 	log.Notice("Done backing up schemas")
+	return nil
 }
 
-func getSchemasToBackup(conn *exasol.Conn, crit Criteria) ([]*schema, []dbObj) {
+func getSchemasToBackup(conn *exasol.Conn, crit Criteria) ([]*schema, []dbObj, error) {
 	sql := fmt.Sprintf(`
 		SELECT schema_name AS s,
 			   schema_name AS o,
@@ -67,7 +77,7 @@ func getSchemasToBackup(conn *exasol.Conn, crit Criteria) ([]*schema, []dbObj) {
 	)
 	res, err := conn.FetchSlice(sql)
 	if err != nil {
-		log.Fatal(err)
+		return nil, nil, fmt.Errorf("Unable to get schemas: %s", err)
 	}
 	schemas := []*schema{}
 	dbObjs := []dbObj{}
@@ -85,10 +95,10 @@ func getSchemasToBackup(conn *exasol.Conn, crit Criteria) ([]*schema, []dbObj) {
 		schemas = append(schemas, s)
 		dbObjs = append(dbObjs, s)
 	}
-	return schemas, dbObjs
+	return schemas, dbObjs, nil
 }
 
-func addVirtualSchemaProps(conn *exasol.Conn, schemas []*schema, crit Criteria) {
+func addVirtualSchemaProps(conn *exasol.Conn, schemas []*schema, crit Criteria) error {
 	sql := fmt.Sprintf(`
 		SELECT schema_name AS s,
 			   schema_name AS o,
@@ -101,7 +111,7 @@ func addVirtualSchemaProps(conn *exasol.Conn, schemas []*schema, crit Criteria) 
 	)
 	res, err := conn.FetchSlice(sql)
 	if err != nil {
-		log.Fatal(err)
+		return fmt.Errorf("Unable to get virtual schema properties: %s", err)
 	}
 
 	for _, row := range res {
@@ -118,14 +128,15 @@ func addVirtualSchemaProps(conn *exasol.Conn, schemas []*schema, crit Criteria) 
 			}
 		}
 		if schema == nil {
-			log.Fatal("Cannot find schema", schemaName)
+			return fmt.Errorf("Cannot find schema %s for virtual property", schemaName)
 		}
 
 		schema.vSchemaProps = append(schema.vSchemaProps, prop)
 	}
+	return nil
 }
 
-func createSchema(dst string, s *schema) {
+func createSchema(dst string, s *schema) error {
 	log.Noticef("Backing up schema %s", s.name)
 	sql := ""
 	if s.isVirtual {
@@ -154,6 +165,7 @@ func createSchema(dst string, s *schema) {
 	file := filepath.Join(dir, "schema.sql")
 	err := ioutil.WriteFile(file, []byte(sql), 0644)
 	if err != nil {
-		log.Fatal("Unable to backup schema", sql, err)
+		return fmt.Errorf("Unable to backup schema: %s", err)
 	}
+	return nil
 }
