@@ -48,7 +48,7 @@ func getRolesToBackup(conn *exasol.Conn) []*role {
 			   role_name AS o,
 			   role_priority,
 			   role_comment
-		FROM exa_dba_roles
+		FROM exa_all_roles
 		ORDER BY local.s`,
 	)
 	res, err := conn.FetchSlice(sql)

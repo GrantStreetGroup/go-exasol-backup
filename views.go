@@ -59,7 +59,7 @@ func getViewsToBackup(conn *exasol.Conn, crit Criteria) ([]*view, []dbObj) {
 			   scope_schema,
 			   view_text,
 			   view_comment
-		FROM exa_dba_views
+		FROM exa_all_views
 		WHERE %s
 		ORDER BY local.s, local.o
 		`, crit.getSQLCriteria(),

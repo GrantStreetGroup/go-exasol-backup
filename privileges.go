@@ -183,7 +183,7 @@ func backupSchemaOwners(src *exasol.Conn, dst string, grantees []string) {
 	    SELECT DISTINCT s.schema_name, s.schema_owner,
             (vs.schema_name IS NOT NULL) AS is_virtual
         FROM exa_schemas AS s
-        LEFT JOIN exa_dba_virtual_schemas AS vs
+        LEFT JOIN exa_all_virtual_schemas AS vs
           ON s.schema_name = vs.schema_name
         WHERE s.schema_owner IN (%s)
 		`, strings.Join(grantees, ","),

@@ -47,7 +47,7 @@ func getScriptsToBackup(conn *exasol.Conn, crit Criteria) ([]*script, []dbObj) {
 			   script_name   AS o,
 			   script_text,
 			   script_comment
-		FROM exa_dba_scripts
+		FROM exa_all_scripts
 		WHERE %s
 		ORDER BY local.s, local.o
 		`, crit.getSQLCriteria(),

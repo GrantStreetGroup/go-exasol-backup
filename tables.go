@@ -98,8 +98,8 @@ func readTable(conn *exasol.Conn, t *table, out chan<- *table, maxRows int) {
 		}
 	}
 	exportSQL := fmt.Sprintf(
-		"EXPORT (SELECT * FROM %s.%s ORDER BY [%s]) INTO CSV AT '%%s' FILE 'data.csv'",
-		conn.QuoteIdent(t.schema), t.qTable(), strings.Join(orderBys, `],[`),
+		"EXPORT (SELECT * FROM [%s].[%s] ORDER BY [%s]) INTO CSV AT '%%s' FILE 'data.csv'",
+		t.schema, t.name, strings.Join(orderBys, `],[`),
 	)
 
 	start := time.Now()
@@ -122,8 +122,9 @@ func getTablesToBackup(conn *exasol.Conn, crit Criteria) ([]*table, []dbObj) {
 			   table_name AS o,
 			   table_row_count,
 			   table_comment
-		FROM exa_dba_tables
-		WHERE %s
+		FROM exa_all_tables
+		WHERE table_is_virtual = FALSE
+		  AND (%s)
 		ORDER BY table_schema, table_name
 		`, crit.getSQLCriteria(),
 	)
@@ -157,8 +158,9 @@ func addTableColumns(conn *exasol.Conn, tables []*table, crit Criteria) {
 			   column_name,    column_type,
 			   column_default, column_identity,
 			   column_comment
-		FROM exa_dba_columns
+		FROM exa_all_columns
 		WHERE column_object_type = 'TABLE'
+		  AND column_is_virtual = FALSE
 		  AND (%s)
 		ORDER BY column_schema, column_table, column_ordinal_position
 		`, crit.getSQLCriteria(),
@@ -207,7 +209,7 @@ func addTableConstraints(conn *exasol.Conn, tables []*table, crit Criteria) {
 			   con.constraint_type,
 			   con.constraint_enabled,
 			   cols.columns
-		FROM exa_dba_constraints AS con
+		FROM exa_all_constraints AS con
 		JOIN (
 			SELECT constraint_schema AS s,
 				   constraint_table  AS o,
@@ -217,7 +219,7 @@ func addTableConstraints(conn *exasol.Conn, tables []*table, crit Criteria) {
 					   ORDER BY ordinal_position
 					   SEPARATOR ','
 				   ) AS columns
-		    FROM exa_dba_constraint_columns
+		    FROM exa_all_constraint_columns
 			WHERE %s
 			GROUP BY local.s, local.o, constraint_name
 		) AS cols USING(constraint_name)
@@ -342,8 +344,4 @@ func writeTableData(dir string, t *table, maxRows int) {
 		}
 	}
 	f.Close()
-}
-
-func (t *table) qTable() string {
-	return fmt.Sprintf("[%s]", t.name)
 }

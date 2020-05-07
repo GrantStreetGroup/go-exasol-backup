@@ -46,7 +46,7 @@ func getFunctionsToBackup(conn *exasol.Conn, crit Criteria) ([]*function, []dbOb
 			   function_name   AS o,
 			   function_text,
 			   function_comment
-		FROM exa_dba_functions
+		FROM exa_all_functions
 		WHERE %s
 		ORDER BY local.s, local.o
 		`, crit.getSQLCriteria(),
