@@ -1,5 +1,5 @@
 /*
-	This library backs up metadata (and optionally data) from an Exasol instance to text files
+	This utility backs up metadata (and optionally data) from an Exasol instance to text files
 */
 
 package backup
@@ -39,10 +39,8 @@ const (
 type Conf struct {
 	// Exasol instance to backup from
 	Source *exasol.Conn
-
 	// Local filesystem directory underwhich to store the backup
 	Destination string
-
 	// The list of object types to backup
 	Objects []Object
 
@@ -54,16 +52,17 @@ type Conf struct {
 	// Non-schema objects (users, roles, connections, parameters) are
 	// not affected by this config. i.e. they will all be backup if requested.
 	Match string
-
 	// Skip is the inverse of Match.
 	// Any schema objects matching it will be skipped.
 	Skip string
 
 	// If > 0 then tables with this many or fewer rows
-	// will have the their data backed up to CSV files
+	// will have the their data backed up to CSV files.
+	// If 0 then no table data will be backed up.
 	MaxTableRows int
 	// If > 0 then views with this many or fewer rows
-	// will have the their data backed up to CSV files
+	// will have the their data backed up to CSV files.
+	// If 0 then no view data will be backed up.
 	MaxViewRows int
 
 	// If true then any text files existing in the destination
@@ -71,7 +70,7 @@ type Conf struct {
 	// If false then the backup is purely additive
 	DropExtras bool
 
-	LogLevel string // Defaults to "error"
+	LogLevel string // Defaults to "warning"
 }
 
 func Backup(cfg Conf) error {
