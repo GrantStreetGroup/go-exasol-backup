@@ -21,8 +21,8 @@ type view struct {
 func (v *view) Schema() string { return v.schema }
 func (v *view) Name() string   { return v.view }
 
-func BackupViews(src *exasol.Conn, dst string, crit criteria, maxRows int, dropExtras bool) {
-	log.Notice("Backingup views")
+func BackupViews(src *exasol.Conn, dst string, crit Criteria, maxRows int, dropExtras bool) {
+	log.Notice("Backing up views")
 
 	views, dbObjs := getViewsToBackup(src, crit)
 	if dropExtras {
@@ -38,7 +38,7 @@ func BackupViews(src *exasol.Conn, dst string, crit criteria, maxRows int, dropE
 		os.MkdirAll(dir, os.ModePerm)
 		backupView(dir, v)
 		if shouldBackupViewData(src, v, maxRows) {
-			log.Noticef("Backingup view data for %s.%s", v.schema, v.view)
+			log.Noticef("Backing up view data for %s.%s", v.schema, v.view)
 			wg := &sync.WaitGroup{}
 			wg.Add(2)
 			data := make(chan []byte)
@@ -48,10 +48,10 @@ func BackupViews(src *exasol.Conn, dst string, crit criteria, maxRows int, dropE
 		}
 	}
 
-	log.Info("Done backingup views")
+	log.Info("Done backing up views")
 }
 
-func getViewsToBackup(conn *exasol.Conn, crit criteria) ([]*view, []dbObj) {
+func getViewsToBackup(conn *exasol.Conn, crit Criteria) ([]*view, []dbObj) {
 	sql := fmt.Sprintf(`
 		SELECT view_schema AS s,
 			   view_name   AS o,
@@ -86,7 +86,7 @@ func getViewsToBackup(conn *exasol.Conn, crit criteria) ([]*view, []dbObj) {
 }
 
 func backupView(dir string, v *view) {
-	log.Noticef("Backingup view %s.%s", v.schema, v.view)
+	log.Noticef("Backing up view %s.%s", v.schema, v.view)
 
 	// We have to swap out the name too because if the view got renamed
 	// the v.text still references the original name.

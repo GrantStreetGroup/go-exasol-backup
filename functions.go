@@ -18,8 +18,8 @@ type function struct {
 func (f *function) Schema() string { return f.schema }
 func (f *function) Name() string   { return f.function }
 
-func BackupFunctions(src *exasol.Conn, dst string, crit criteria, dropExtras bool) {
-	log.Notice("Backingup functions")
+func BackupFunctions(src *exasol.Conn, dst string, crit Criteria, dropExtras bool) {
+	log.Notice("Backing up functions")
 
 	allFuncs, dbObjs := getFunctionsToBackup(src, crit)
 	if dropExtras {
@@ -36,10 +36,10 @@ func BackupFunctions(src *exasol.Conn, dst string, crit criteria, dropExtras boo
 		os.MkdirAll(dir, os.ModePerm)
 		createFunction(dir, f)
 	}
-	log.Info("Done backingup functions")
+	log.Info("Done backing up functions")
 }
 
-func getFunctionsToBackup(conn *exasol.Conn, crit criteria) ([]*function, []dbObj) {
+func getFunctionsToBackup(conn *exasol.Conn, crit Criteria) ([]*function, []dbObj) {
 	sql := fmt.Sprintf(`
 		SELECT function_schema AS s,
 			   function_name   AS o,
@@ -68,7 +68,7 @@ func getFunctionsToBackup(conn *exasol.Conn, crit criteria) ([]*function, []dbOb
 }
 
 func createFunction(dst string, f *function) {
-	log.Noticef("Backingup function %s.%s", f.schema, f.function)
+	log.Noticef("Backing up function %s.%s", f.schema, f.function)
 	createFunction := "CREATE OR REPLACE " + f.text
 	sql := fmt.Sprintf("OPEN SCHEMA %s;\n--/\n%s;\n", f.schema, createFunction)
 	file := filepath.Join(dst, f.function+".sql")

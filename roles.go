@@ -16,7 +16,7 @@ type role struct {
 }
 
 func BackupRoles(src *exasol.Conn, dst string, dropExtras bool) {
-	log.Notice("Backingup roles")
+	log.Notice("Backing up roles")
 
 	roles := getRolesToBackup(src)
 	if len(roles) == 0 {
@@ -39,7 +39,7 @@ func BackupRoles(src *exasol.Conn, dst string, dropExtras bool) {
 
 	BackupPrivileges(src, dir, roleNames)
 
-	log.Info("Done backingup roles")
+	log.Info("Done backing up roles")
 }
 
 func getRolesToBackup(conn *exasol.Conn) []*role {
@@ -71,7 +71,7 @@ func getRolesToBackup(conn *exasol.Conn) []*role {
 }
 
 func createRole(dst string, r *role) {
-	log.Noticef("Backingup role %s", r.name)
+	log.Noticef("Backing up role %s", r.name)
 
 	var sql string
 	if r.name != "DBA" && r.name != "PUBLIC" {

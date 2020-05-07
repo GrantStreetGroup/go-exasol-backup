@@ -17,7 +17,7 @@ type user struct {
 }
 
 func BackupUsers(src *exasol.Conn, dst string, dropExtras bool) {
-	log.Notice("Backingup users")
+	log.Notice("Backing up users")
 
 	users := getUsersToBackup(src)
 	if len(users) == 0 {
@@ -40,7 +40,7 @@ func BackupUsers(src *exasol.Conn, dst string, dropExtras bool) {
 
 	BackupPrivileges(src, dir, userNames)
 
-	log.Info("Done backingup users")
+	log.Info("Done backing up users")
 }
 
 func getUsersToBackup(conn *exasol.Conn) []*user {
@@ -77,8 +77,9 @@ func getUsersToBackup(conn *exasol.Conn) []*user {
 }
 
 func backupUser(dst string, u *user) {
-	log.Noticef("Backingup user %s", u.name)
+	log.Noticef("Backing up user %s", u.name)
 
+	sql := ""
 	dn := u.ldapDN
 	if dn == "" {
 		// If the user is setup with a non-LDAP account
@@ -90,9 +91,10 @@ func backupUser(dst string, u *user) {
 		// in manually later and change the password so in
 		// the meantime we set an invalid password by
 		// setting it to an invalid LDAP distinguished name.
-		dn = "MUST CHANGE PASSWORD"
+		sql = fmt.Sprintf("CREATE USER %s IDENTIFIED BY ********;\n", u.name)
+	} else {
+		sql = fmt.Sprintf("CREATE USER %s IDENTIFIED AT LDAP AS '%s';\n", u.name, dn)
 	}
-	sql := fmt.Sprintf("CREATE USER %s IDENTIFIED AT LDAP AS '%s';\n", u.name, dn)
 
 	if u.priority != "" {
 		sql += fmt.Sprintf("GRANT PRIORITY %s TO %s;\n", u.priority, u.name)

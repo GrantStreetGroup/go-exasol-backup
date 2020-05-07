@@ -40,8 +40,8 @@ type constraint struct {
 func (t *table) Schema() string { return t.schema }
 func (t *table) Name() string   { return t.table }
 
-func BackupTables(src *exasol.Conn, dst string, crit criteria, maxRows int, dropExtras bool) {
-	log.Notice("Backingup tables")
+func BackupTables(src *exasol.Conn, dst string, crit Criteria, maxRows int, dropExtras bool) {
+	log.Notice("Backing up tables")
 	wg := &sync.WaitGroup{}
 	wg.Add(2)
 
@@ -50,10 +50,10 @@ func BackupTables(src *exasol.Conn, dst string, crit criteria, maxRows int, drop
 	go writeTables(dst, tables, crit, maxRows, wg)
 
 	wg.Wait()
-	log.Info("Done backingup tables")
+	log.Info("Done backing up tables")
 }
 
-func readTables(conn *exasol.Conn, out chan<- *table, crit criteria, maxRows int, dst string, dropExtras bool, wg *sync.WaitGroup) {
+func readTables(conn *exasol.Conn, out chan<- *table, crit Criteria, maxRows int, dst string, dropExtras bool, wg *sync.WaitGroup) {
 	defer func() {
 		close(out)
 		wg.Done()
@@ -77,7 +77,7 @@ func readTables(conn *exasol.Conn, out chan<- *table, crit criteria, maxRows int
 }
 
 func readTable(conn *exasol.Conn, t *table, out chan<- *table, maxRows int) {
-	log.Noticef("Backingup %s.%s", t.schema, t.table)
+	log.Noticef("Backing up %s.%s", t.schema, t.table)
 	if t.rowCount == 0 || t.rowCount > float64(maxRows) {
 		out <- t
 		return
@@ -115,7 +115,7 @@ func readTable(conn *exasol.Conn, t *table, out chan<- *table, maxRows int) {
 	log.Infof("Read %0.fMB in %0.fs @ %0.fMBps and %0.frps", totalMB, duration, mbps, rps)
 }
 
-func getTablesToBackup(conn *exasol.Conn, crit criteria) ([]*table, []dbObj) {
+func getTablesToBackup(conn *exasol.Conn, crit Criteria) ([]*table, []dbObj) {
 	sql := fmt.Sprintf(`
 		SELECT table_schema AS s, table_name AS o, table_row_count
 		FROM exa_all_tables
@@ -143,7 +143,7 @@ func getTablesToBackup(conn *exasol.Conn, crit criteria) ([]*table, []dbObj) {
 	return tables, dbObjs
 }
 
-func addTableColumns(conn *exasol.Conn, tables []*table, crit criteria) {
+func addTableColumns(conn *exasol.Conn, tables []*table, crit Criteria) {
 	sql := fmt.Sprintf(`
 		SELECT column_schema AS s,
 			   column_table  AS o,
@@ -193,7 +193,7 @@ func addTableColumns(conn *exasol.Conn, tables []*table, crit criteria) {
 	}
 }
 
-func addTableConstraints(conn *exasol.Conn, tables []*table, crit criteria) {
+func addTableConstraints(conn *exasol.Conn, tables []*table, crit Criteria) {
 	sql := fmt.Sprintf(`
 		SELECT con.constraint_schema AS s,
 			   con.constraint_table  AS o,
@@ -249,7 +249,7 @@ func addTableConstraints(conn *exasol.Conn, tables []*table, crit criteria) {
 	}
 }
 
-func writeTables(dst string, in <-chan *table, crit criteria, maxRows int, wg *sync.WaitGroup) {
+func writeTables(dst string, in <-chan *table, crit Criteria, maxRows int, wg *sync.WaitGroup) {
 	for t := range in {
 		dir := filepath.Join(dst, "schemas", t.schema, "tables")
 		os.MkdirAll(dir, os.ModePerm)

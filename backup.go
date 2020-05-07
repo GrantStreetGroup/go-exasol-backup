@@ -5,29 +5,23 @@
 package backup
 
 import (
-	"bufio"
 	"errors"
 	"fmt"
 	"io/ioutil"
 	"os"
-	osUser "os/user"
 	"path/filepath"
-
 	"regexp"
 	"strings"
-	"syscall"
-
-	"github.com/op/go-logging"
-	"github.com/spf13/pflag"
-	"github.com/spf13/viper"
-	"golang.org/x/crypto/ssh/terminal"
 
 	"github.com/grantstreetgroup/go-exasol-client"
+	"github.com/op/go-logging"
 )
 
 var log = logging.MustGetLogger("exasol-backup")
 
 /* Public Interface */
+
+type Object byte
 
 const (
 	ALL Object = iota
@@ -88,7 +82,7 @@ func Backup(cfg Conf) error {
 	if cfg.Match == "" {
 		cfg.Match = "*.*"
 	}
-	if cfg.ExasolConn == nil {
+	if cfg.ExaConn == nil {
 		return errors.New("You must specify an ExaConn")
 	}
 	if cfg.Destination == "" {
@@ -96,7 +90,7 @@ func Backup(cfg Conf) error {
 	}
 	fi, err := os.Stat(cfg.Destination)
 	if os.IsNotExist(err) || !fi.Mode().IsDir() {
-		return error.New("The Destination must be a valid directory path")
+		return errors.New("The Destination must be a valid directory path")
 	}
 
 	backup := map[Object]bool{}
@@ -106,7 +100,7 @@ func Backup(cfg Conf) error {
 	src := cfg.ExaConn
 	dst := cfg.Destination
 	drop := cfg.DropExtras
-	crit := criteria{cfg.Match, cfg.Skip}
+	crit := Criteria{cfg.Match, cfg.Skip}
 
 	// TODO capture and restore original values of these 2 settings
 	src.DisableAutoCommit()
@@ -115,28 +109,28 @@ func Backup(cfg Conf) error {
 	if backup[PARAMETERS] || backup[ALL] {
 		BackupParameters(src, dst)
 	}
-	if backup[SCHEMAS] || backupAll {
+	if backup[SCHEMAS] || backup[ALL] {
 		BackupSchemas(src, dst, crit, drop)
 	}
-	if backup[TABLES] || backupAll {
+	if backup[TABLES] || backup[ALL] {
 		BackupTables(src, dst, crit, cfg.MaxTableRows, drop)
 	}
-	if backup[VIEWS] || backupAll {
+	if backup[VIEWS] || backup[ALL] {
 		BackupViews(src, dst, crit, cfg.MaxViewRows, drop)
 	}
-	if backup[SCRIPTS] || backupAll {
+	if backup[SCRIPTS] || backup[ALL] {
 		BackupScripts(src, dst, crit, drop)
 	}
-	if backup[FUNCTIONS] || backupAll {
+	if backup[FUNCTIONS] || backup[ALL] {
 		BackupFunctions(src, dst, crit, drop)
 	}
-	if backup[CONNECTIONS] || backupAll {
+	if backup[CONNECTIONS] || backup[ALL] {
 		BackupConnections(src, dst)
 	}
-	if backup[ROLES] || backupAll {
+	if backup[ROLES] || backup[ALL] {
 		BackupRoles(src, dst, drop)
 	}
-	if backup[USERS] || backupAll {
+	if backup[USERS] || backup[ALL] {
 		BackupUsers(src, dst, drop)
 	}
 
@@ -144,12 +138,12 @@ func Backup(cfg Conf) error {
 	return nil
 }
 
-/* Private routines */
-
-type criteria struct {
+type Criteria struct {
 	match string
 	skip  string
 }
+
+/* Private routines */
 
 type dbObj interface {
 	Name() string
@@ -175,7 +169,7 @@ func initLogging(logLevelStr string) {
 	log.SetBackend(leveledBackend)
 }
 
-func (c *criteria) getSQLCriteria() string {
+func (c *Criteria) getSQLCriteria() string {
 	whereClause := buildCriteria(c.match)
 	if c.skip != "" {
 		whereClause = fmt.Sprintf(
@@ -186,7 +180,7 @@ func (c *criteria) getSQLCriteria() string {
 	return whereClause
 }
 
-func (c *criteria) matches(schema, object string) bool {
+func (c *Criteria) matches(schema, object string) bool {
 	return matchesCriteria(c.match, schema, object) &&
 		(c.skip == "" || !matchesCriteria(c.skip, schema, object))
 }
@@ -234,7 +228,7 @@ func buildCriteria(argStr string) string {
 	return strings.Join(whereClause, " OR ")
 }
 
-func removeExtraObjects(objType string, srcObjs []dbObj, dst string, crit criteria) {
+func removeExtraObjects(objType string, srcObjs []dbObj, dst string, crit Criteria) {
 	log.Noticef("Removing extraneous %s", objType)
 
 	schemaDir := filepath.Join(dst, "schemas")

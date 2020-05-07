@@ -17,7 +17,7 @@ type parameter struct {
 }
 
 func BackupParameters(src *exasol.Conn, dst string) {
-	log.Notice("Backingup parameters")
+	log.Notice("Backing up parameters")
 
 	parameters := getParametersToBackup(src)
 	if len(parameters) == 0 {
@@ -37,7 +37,7 @@ func BackupParameters(src *exasol.Conn, dst string) {
 		log.Fatal("Unable to backup parameters", sql, err)
 	}
 
-	log.Info("Done backingup parameters")
+	log.Info("Done backing up parameters")
 }
 
 func getParametersToBackup(conn *exasol.Conn) []*parameter {
@@ -66,7 +66,7 @@ func getParametersToBackup(conn *exasol.Conn) []*parameter {
 }
 
 func createParameter(p *parameter) string {
-	log.Noticef("Backingup parameter %s", p.name)
+	log.Noticef("Backing up parameter %s", p.name)
 	q := "'"
 	if p.name == "NLS_FIRST_DAY_OF_WEEK" {
 		// This param is numeric so no quotes

@@ -18,8 +18,8 @@ type schema struct {
 func (s *schema) Schema() string { return s.name }
 func (s *schema) Name() string   { return "" }
 
-func BackupSchemas(src *exasol.Conn, dst string, crit criteria, dropExtras bool) {
-	log.Noticef("Backingup schemas")
+func BackupSchemas(src *exasol.Conn, dst string, crit Criteria, dropExtras bool) {
+	log.Noticef("Backing up schemas")
 
 	schemas, dbObjs := getSchemasToBackup(src, crit)
 	if dropExtras {
@@ -37,10 +37,10 @@ func BackupSchemas(src *exasol.Conn, dst string, crit criteria, dropExtras bool)
 		createSchema(dir, schema)
 	}
 
-	log.Notice("Done backingup schemas")
+	log.Notice("Done backing up schemas")
 }
 
-func getSchemasToBackup(conn *exasol.Conn, crit criteria) ([]*schema, []dbObj) {
+func getSchemasToBackup(conn *exasol.Conn, crit Criteria) ([]*schema, []dbObj) {
 	sql := fmt.Sprintf(`
 		SELECT schema_name AS s,
 			   schema_name AS o
@@ -64,7 +64,7 @@ func getSchemasToBackup(conn *exasol.Conn, crit criteria) ([]*schema, []dbObj) {
 }
 
 func createSchema(dst string, s *schema) {
-	log.Noticef("Backingup schema %s", s.name)
+	log.Noticef("Backing up schema %s", s.name)
 	sql := fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %s;\n", s.name)
 
 	dir := filepath.Join(dst, s.name)

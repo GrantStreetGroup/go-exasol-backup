@@ -19,8 +19,8 @@ type script struct {
 func (s *script) Schema() string { return s.schema }
 func (s *script) Name() string   { return s.script }
 
-func BackupScripts(src *exasol.Conn, dst string, crit criteria, dropExtras bool) {
-	log.Notice("Backingup scripts")
+func BackupScripts(src *exasol.Conn, dst string, crit Criteria, dropExtras bool) {
+	log.Notice("Backing up scripts")
 
 	scripts, dbObjs := getScriptsToBackup(src, crit)
 	if dropExtras {
@@ -37,10 +37,10 @@ func BackupScripts(src *exasol.Conn, dst string, crit criteria, dropExtras bool)
 		backupScript(dir, s)
 	}
 
-	log.Info("Done backingup scripts")
+	log.Info("Done backing up scripts")
 }
 
-func getScriptsToBackup(conn *exasol.Conn, crit criteria) ([]*script, []dbObj) {
+func getScriptsToBackup(conn *exasol.Conn, crit Criteria) ([]*script, []dbObj) {
 	sql := fmt.Sprintf(`
 		SELECT script_schema AS s,
 			   script_name   AS o,
@@ -69,7 +69,7 @@ func getScriptsToBackup(conn *exasol.Conn, crit criteria) ([]*script, []dbObj) {
 }
 
 func backupScript(dst string, s *script) {
-	log.Noticef("Backingup script %s.%s", s.schema, s.script)
+	log.Noticef("Backing up script %s.%s", s.schema, s.script)
 	r := regexp.MustCompile(`^(?i)CREATE\s+(OR\s+REPLACE)?`)
 	createScript := r.ReplaceAllString(s.text, "CREATE OR REPLACE ")
 	sql := fmt.Sprintf("OPEN SCHEMA %s;\n%s;\n", s.schema, createScript)
