@@ -227,8 +227,8 @@ func matchesCriteria(matchStr, schema, object string) bool {
 		} else {
 			objectPattern = ".*"
 		}
-		if regexp.MustCompile("(?i)" + schemaPattern).MatchString(schema) {
-			if object == "" || regexp.MustCompile("(?i)"+objectPattern).MatchString(object) {
+		if regexp.MustCompile("(?i)^" + schemaPattern + "$").MatchString(schema) {
+			if object == "" || regexp.MustCompile("(?i)^"+objectPattern+"$").MatchString(object) {
 				return true
 			}
 		}
