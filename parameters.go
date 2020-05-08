@@ -16,13 +16,16 @@ type parameter struct {
 	value string
 }
 
-func BackupParameters(src *exasol.Conn, dst string) {
-	log.Notice("Backingup parameters")
+func BackupParameters(src *exasol.Conn, dst string) error {
+	log.Notice("Backing up parameters")
 
-	parameters := getParametersToBackup(src)
+	parameters, err := getParametersToBackup(src)
+	if err != nil {
+		return err
+	}
 	if len(parameters) == 0 {
 		log.Warning("No parameters found")
-		return
+		return nil
 	}
 
 	var sql string
@@ -32,15 +35,16 @@ func BackupParameters(src *exasol.Conn, dst string) {
 
 	os.MkdirAll(dst, os.ModePerm)
 	file := filepath.Join(dst, "parameters.sql")
-	err := ioutil.WriteFile(file, []byte(sql), 0644)
+	err = ioutil.WriteFile(file, []byte(sql), 0644)
 	if err != nil {
-		log.Fatal("Unable to backup parameters", sql, err)
+		return fmt.Errorf("Unable to backup parameters: %s", err)
 	}
 
-	log.Info("Done backingup parameters")
+	log.Info("Done backing up parameters")
+	return nil
 }
 
-func getParametersToBackup(conn *exasol.Conn) []*parameter {
+func getParametersToBackup(conn *exasol.Conn) ([]*parameter, error) {
 	sql := fmt.Sprintf(`
 		SELECT parameter_name AS s,
 			   parameter_name AS o,
@@ -51,7 +55,7 @@ func getParametersToBackup(conn *exasol.Conn) []*parameter {
 	)
 	res, err := conn.FetchSlice(sql)
 	if err != nil {
-		log.Fatal(err)
+		return nil, fmt.Errorf("Unable to get parameters to backup: %s", err)
 	}
 	parameters := []*parameter{}
 	for _, row := range res {
@@ -62,11 +66,11 @@ func getParametersToBackup(conn *exasol.Conn) []*parameter {
 		}
 		parameters = append(parameters, p)
 	}
-	return parameters
+	return parameters, nil
 }
 
 func createParameter(p *parameter) string {
-	log.Noticef("Backingup parameter %s", p.name)
+	log.Noticef("Backing up parameter %s", p.name)
 	q := "'"
 	if p.name == "NLS_FIRST_DAY_OF_WEEK" {
 		// This param is numeric so no quotes

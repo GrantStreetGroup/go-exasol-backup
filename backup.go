@@ -1,33 +1,27 @@
 /*
-	This library backs up metadata (and optionally data) from an Exasol instance to text files
+	This utility backs up metadata (and optionally data) from an Exasol instance to text files
 */
 
 package backup
 
 import (
-	"bufio"
 	"errors"
 	"fmt"
 	"io/ioutil"
 	"os"
-	osUser "os/user"
 	"path/filepath"
-
 	"regexp"
 	"strings"
-	"syscall"
-
-	"github.com/op/go-logging"
-	"github.com/spf13/pflag"
-	"github.com/spf13/viper"
-	"golang.org/x/crypto/ssh/terminal"
 
 	"github.com/grantstreetgroup/go-exasol-client"
+	"github.com/op/go-logging"
 )
 
 var log = logging.MustGetLogger("exasol-backup")
 
 /* Public Interface */
+
+type Object byte
 
 const (
 	ALL Object = iota
@@ -44,11 +38,9 @@ const (
 
 type Conf struct {
 	// Exasol instance to backup from
-	ExaConn *exasol.Conn
-
+	Source *exasol.Conn
 	// Local filesystem directory underwhich to store the backup
 	Destination string
-
 	// The list of object types to backup
 	Objects []Object
 
@@ -60,16 +52,17 @@ type Conf struct {
 	// Non-schema objects (users, roles, connections, parameters) are
 	// not affected by this config. i.e. they will all be backup if requested.
 	Match string
-
 	// Skip is the inverse of Match.
 	// Any schema objects matching it will be skipped.
 	Skip string
 
 	// If > 0 then tables with this many or fewer rows
-	// will have the their data backed up to CSV files
+	// will have the their data backed up to CSV files.
+	// If 0 then no table data will be backed up.
 	MaxTableRows int
 	// If > 0 then views with this many or fewer rows
-	// will have the their data backed up to CSV files
+	// will have the their data backed up to CSV files.
+	// If 0 then no view data will be backed up.
 	MaxViewRows int
 
 	// If true then any text files existing in the destination
@@ -77,92 +70,122 @@ type Conf struct {
 	// If false then the backup is purely additive
 	DropExtras bool
 
-	LogLevel string // Defaults to "error"
+	LogLevel string // Defaults to "warning"
 }
 
 func Backup(cfg Conf) error {
-	initLogging(cfg.LogLevel)
+	err := initLogging(cfg.LogLevel)
+	if err != nil {
+		return err
+	}
 	log.Noticef("Backing up to %s", cfg.Destination)
 
 	// Set defaults
 	if cfg.Match == "" {
 		cfg.Match = "*.*"
 	}
-	if cfg.ExasolConn == nil {
-		return errors.New("You must specify an ExaConn")
+	if cfg.Source == nil {
+		return errors.New("You must specify a source Exasol connection")
 	}
 	if cfg.Destination == "" {
 		return errors.New("You must specify a Destination")
 	}
 	fi, err := os.Stat(cfg.Destination)
 	if os.IsNotExist(err) || !fi.Mode().IsDir() {
-		return error.New("The Destination must be a valid directory path")
+		return errors.New("The Destination must be a valid directory path")
 	}
 
 	backup := map[Object]bool{}
 	for _, o := range cfg.Objects {
 		backup[o] = true
 	}
-	src := cfg.ExaConn
+	src := cfg.Source
 	dst := cfg.Destination
 	drop := cfg.DropExtras
-	crit := criteria{cfg.Match, cfg.Skip}
+	crit := Criteria{cfg.Match, cfg.Skip}
 
 	// TODO capture and restore original values of these 2 settings
 	src.DisableAutoCommit()
 	src.Execute("ALTER SESSION SET NLS_TIMESTAMP_FORMAT='YYYY-MM-DD HH24:MI:SS.FF3'")
 
 	if backup[PARAMETERS] || backup[ALL] {
-		BackupParameters(src, dst)
+		err := BackupParameters(src, dst)
+		if err != nil {
+			return err
+		}
 	}
-	if backup[SCHEMAS] || backupAll {
-		BackupSchemas(src, dst, crit, drop)
+	if backup[SCHEMAS] || backup[ALL] {
+		err := BackupSchemas(src, dst, crit, drop)
+		if err != nil {
+			return err
+		}
 	}
-	if backup[TABLES] || backupAll {
-		BackupTables(src, dst, crit, cfg.MaxTableRows, drop)
+	if backup[TABLES] || backup[ALL] {
+		err := BackupTables(src, dst, crit, cfg.MaxTableRows, drop)
+		if err != nil {
+			return err
+		}
 	}
-	if backup[VIEWS] || backupAll {
-		BackupViews(src, dst, crit, cfg.MaxViewRows, drop)
+	if backup[VIEWS] || backup[ALL] {
+		err := BackupViews(src, dst, crit, cfg.MaxViewRows, drop)
+		if err != nil {
+			return err
+		}
 	}
-	if backup[SCRIPTS] || backupAll {
-		BackupScripts(src, dst, crit, drop)
+	if backup[SCRIPTS] || backup[ALL] {
+		err := BackupScripts(src, dst, crit, drop)
+		if err != nil {
+			return err
+		}
 	}
-	if backup[FUNCTIONS] || backupAll {
-		BackupFunctions(src, dst, crit, drop)
+	if backup[FUNCTIONS] || backup[ALL] {
+		err := BackupFunctions(src, dst, crit, drop)
+		if err != nil {
+			return err
+		}
 	}
-	if backup[CONNECTIONS] || backupAll {
-		BackupConnections(src, dst)
+	if backup[CONNECTIONS] || backup[ALL] {
+		err := BackupConnections(src, dst)
+		if err != nil {
+			return err
+		}
 	}
-	if backup[ROLES] || backupAll {
-		BackupRoles(src, dst, drop)
+	if backup[ROLES] || backup[ALL] {
+		err := BackupRoles(src, dst, drop)
+		if err != nil {
+			return err
+		}
 	}
-	if backup[USERS] || backupAll {
-		BackupUsers(src, dst, drop)
+	if backup[USERS] || backup[ALL] {
+		err := BackupUsers(src, dst, drop)
+		if err != nil {
+			return err
+		}
 	}
 
 	log.Notice("Done backing up")
 	return nil
 }
 
-/* Private routines */
-
-type criteria struct {
+type Criteria struct {
 	match string
 	skip  string
 }
+
+/* Private routines */
 
 type dbObj interface {
 	Name() string
 	Schema() string
 }
 
-func initLogging(logLevelStr string) {
+func initLogging(logLevelStr string) error {
 	if logLevelStr == "" {
-		logLevelStr = "error"
+		logLevelStr = "warning"
 	}
 	logLevel, err := logging.LogLevel(logLevelStr)
 	if err != nil {
-		log.Fatal("Unrecognized log level", err)
+		return fmt.Errorf("Unrecognized log level: %s", err)
 	}
 	logFormat := logging.MustStringFormatter(
 		"%{color}%{time:15:04:05.000} %{shortfunc}: " +
@@ -173,9 +196,11 @@ func initLogging(logLevelStr string) {
 	leveledBackend := logging.AddModuleLevel(formattedBackend)
 	leveledBackend.SetLevel(logLevel, "exasol-backup")
 	log.SetBackend(leveledBackend)
+
+	return nil
 }
 
-func (c *criteria) getSQLCriteria() string {
+func (c *Criteria) getSQLCriteria() string {
 	whereClause := buildCriteria(c.match)
 	if c.skip != "" {
 		whereClause = fmt.Sprintf(
@@ -186,7 +211,7 @@ func (c *criteria) getSQLCriteria() string {
 	return whereClause
 }
 
-func (c *criteria) matches(schema, object string) bool {
+func (c *Criteria) matches(schema, object string) bool {
 	return matchesCriteria(c.match, schema, object) &&
 		(c.skip == "" || !matchesCriteria(c.skip, schema, object))
 }
@@ -227,14 +252,14 @@ func buildCriteria(argStr string) string {
 		criteria := fmt.Sprintf(`(
 				UPPER(local.s) LIKE UPPER('%s') AND
 				UPPER(local.o) LIKE UPPER('%s')
-			)`, schema, object,
+			)`, qStr(schema), qStr(object),
 		)
 		whereClause = append(whereClause, criteria)
 	}
 	return strings.Join(whereClause, " OR ")
 }
 
-func removeExtraObjects(objType string, srcObjs []dbObj, dst string, crit criteria) {
+func removeExtraObjects(objType string, srcObjs []dbObj, dst string, crit Criteria) {
 	log.Noticef("Removing extraneous %s", objType)
 
 	schemaDir := filepath.Join(dst, "schemas")
@@ -289,28 +314,6 @@ SCHEMA:
 	}
 }
 
-func openSchema(conn *exasol.Conn, schema string) {
-	conn.Conf.SuppressError = true
-
-	openSchema := fmt.Sprintf("OPEN SCHEMA %s", schema)
-	_, err := conn.Execute(openSchema)
-	if err != nil {
-		if regexp.MustCompile(`schema .* not found`).MatchString(err.Error()) {
-
-			createSchema := fmt.Sprintf("CREATE SCHEMA %s", schema)
-			_, err = conn.Execute(createSchema)
-			if err != nil {
-				log.Fatal("Unable to create schema", createSchema, err)
-			}
-
-			_, err = conn.Execute(openSchema)
-			if err != nil {
-				log.Fatal("Unable to open schema", openSchema, err)
-			}
-
-		} else {
-			log.Fatal("Unable to open schema", openSchema, err)
-		}
-	}
-	conn.Conf.SuppressError = false
+func qStr(str string) string {
+	return exasol.QuoteStr(str)
 }

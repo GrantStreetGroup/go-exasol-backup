@@ -15,13 +15,16 @@ type role struct {
 	comment  string
 }
 
-func BackupRoles(src *exasol.Conn, dst string, dropExtras bool) {
-	log.Notice("Backingup roles")
+func BackupRoles(src *exasol.Conn, dst string, dropExtras bool) error {
+	log.Notice("Backing up roles")
 
-	roles := getRolesToBackup(src)
+	roles, err := getRolesToBackup(src)
+	if err != nil {
+		return err
+	}
 	if len(roles) == 0 {
 		log.Warning("No roles found")
-		return
+		return nil
 	}
 
 	dir := filepath.Join(dst, "roles")
@@ -33,27 +36,34 @@ func BackupRoles(src *exasol.Conn, dst string, dropExtras bool) {
 
 	roleNames := []string{"PUBLIC"}
 	for _, role := range roles {
-		createRole(dir, role)
+		err = createRole(dir, role)
+		if err != nil {
+			return err
+		}
 		roleNames = append(roleNames, role.name)
 	}
 
-	BackupPrivileges(src, dir, roleNames)
+	err = BackupPrivileges(src, dir, roleNames)
+	if err != nil {
+		return err
+	}
 
-	log.Info("Done backingup roles")
+	log.Info("Done backing up roles")
+	return nil
 }
 
-func getRolesToBackup(conn *exasol.Conn) []*role {
+func getRolesToBackup(conn *exasol.Conn) ([]*role, error) {
 	sql := fmt.Sprintf(`
 		SELECT role_name AS s,
 			   role_name AS o,
 			   role_priority,
 			   role_comment
-		FROM exa_dba_roles
+		FROM exa_all_roles
 		ORDER BY local.s`,
 	)
 	res, err := conn.FetchSlice(sql)
 	if err != nil {
-		log.Fatal(err)
+		return nil, fmt.Errorf("Unable to get roles: %s", err)
 	}
 	roles := []*role{}
 	for _, row := range res {
@@ -67,11 +77,11 @@ func getRolesToBackup(conn *exasol.Conn) []*role {
 		}
 		roles = append(roles, r)
 	}
-	return roles
+	return roles, nil
 }
 
-func createRole(dst string, r *role) {
-	log.Noticef("Backingup role %s", r.name)
+func createRole(dst string, r *role) error {
+	log.Noticef("Backing up role %s", r.name)
 
 	var sql string
 	if r.name != "DBA" && r.name != "PUBLIC" {
@@ -81,12 +91,13 @@ func createRole(dst string, r *role) {
 		sql += fmt.Sprintf("GRANT PRIORITY %s TO %s;\n", r.priority, r.name)
 	}
 	if r.comment != "" {
-		sql += fmt.Sprintf("COMMENT ON ROLE %s IS '%s';\n", r.name, exasol.QuoteStr(r.comment))
+		sql += fmt.Sprintf("COMMENT ON ROLE %s IS '%s';\n", r.name, qStr(r.comment))
 	}
 
 	file := filepath.Join(dst, r.name+".sql")
 	err := ioutil.WriteFile(file, []byte(sql), 0644)
 	if err != nil {
-		log.Fatal("Unable to backup role", sql, err)
+		return fmt.Errorf("Unable to backup role: %s", err)
 	}
+	return nil
 }

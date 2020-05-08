@@ -16,11 +16,12 @@ import (
 
 type table struct {
 	schema      string
-	table       string
+	name        string
 	rowCount    float64
 	columns     []*column
 	constraints []*constraint
 	data        chan []byte
+	comment     string
 }
 
 type column struct {
@@ -38,28 +39,39 @@ type constraint struct {
 }
 
 func (t *table) Schema() string { return t.schema }
-func (t *table) Name() string   { return t.table }
+func (t *table) Name() string   { return t.name }
 
-func BackupTables(src *exasol.Conn, dst string, crit criteria, maxRows int, dropExtras bool) {
-	log.Notice("Backingup tables")
+func BackupTables(src *exasol.Conn, dst string, crit Criteria, maxRows int, dropExtras bool) error {
+	log.Notice("Backing up tables")
 	wg := &sync.WaitGroup{}
 	wg.Add(2)
 
 	tables := make(chan *table, 10)
-	go readTables(src, tables, crit, maxRows, dst, dropExtras, wg)
-	go writeTables(dst, tables, crit, maxRows, wg)
+	errors := make(chan error, 2)
+	go readTables(src, tables, crit, maxRows, dst, dropExtras, errors, wg)
+	go writeTables(dst, tables, crit, maxRows, errors, wg)
 
 	wg.Wait()
-	log.Info("Done backingup tables")
+	log.Info("Done backing up tables")
+	select {
+	case err := <-errors:
+		return err
+	default:
+		return nil
+	}
 }
 
-func readTables(conn *exasol.Conn, out chan<- *table, crit criteria, maxRows int, dst string, dropExtras bool, wg *sync.WaitGroup) {
+func readTables(conn *exasol.Conn, out chan<- *table, crit Criteria, maxRows int, dst string, dropExtras bool, errors chan<- error, wg *sync.WaitGroup) {
 	defer func() {
 		close(out)
 		wg.Done()
 	}()
 
-	tables, dbObjs := getTablesToBackup(conn, crit)
+	tables, dbObjs, err := getTablesToBackup(conn, crit)
+	if err != nil {
+		errors <- err
+		return
+	}
 	if dropExtras {
 		removeExtraObjects("tables", dbObjs, dst, crit)
 	}
@@ -68,19 +80,31 @@ func readTables(conn *exasol.Conn, out chan<- *table, crit criteria, maxRows int
 		return
 	}
 
-	addTableColumns(conn, tables, crit)
-	addTableConstraints(conn, tables, crit)
+	err = addTableColumns(conn, tables, crit)
+	if err != nil {
+		errors <- err
+		return
+	}
+	err = addTableConstraints(conn, tables, crit)
+	if err != nil {
+		errors <- err
+		return
+	}
 
 	for _, table := range tables {
-		readTable(conn, table, out, maxRows)
+		err = readTable(conn, table, out, maxRows)
+		if err != nil {
+			errors <- err
+			return
+		}
 	}
 }
 
-func readTable(conn *exasol.Conn, t *table, out chan<- *table, maxRows int) {
-	log.Noticef("Backingup %s.%s", t.schema, t.table)
+func readTable(conn *exasol.Conn, t *table, out chan<- *table, maxRows int) error {
+	log.Noticef("Backing up %s.%s", t.schema, t.name)
 	if t.rowCount == 0 || t.rowCount > float64(maxRows) {
 		out <- t
-		return
+		return nil
 	}
 	t.data = make(chan []byte, 10000)
 	out <- t
@@ -97,14 +121,14 @@ func readTable(conn *exasol.Conn, t *table, out chan<- *table, maxRows int) {
 		}
 	}
 	exportSQL := fmt.Sprintf(
-		"EXPORT (SELECT * FROM %s.%s ORDER BY [%s]) INTO CSV AT '%%s' FILE 'data.csv'",
-		conn.QuoteIdent(t.schema), t.qTable(), strings.Join(orderBys, `],[`),
+		"EXPORT (SELECT * FROM [%s].[%s] ORDER BY [%s]) INTO CSV AT '%%s' FILE 'data.csv'",
+		t.schema, t.name, strings.Join(orderBys, `],[`),
 	)
 
 	start := time.Now()
 	bytesRead, err := conn.StreamQuery(exportSQL, t.data)
 	if err != nil {
-		log.Fatal("Unable to read:", err)
+		return fmt.Errorf("Unable to read table %s.%s: %s", t.schema, t.name, err)
 	}
 	close(t.data)
 	duration := time.Since(start).Seconds()
@@ -113,37 +137,45 @@ func readTable(conn *exasol.Conn, t *table, out chan<- *table, maxRows int) {
 	mbps := totalMB / duration
 	rps := t.rowCount / duration
 	log.Infof("Read %0.fMB in %0.fs @ %0.fMBps and %0.frps", totalMB, duration, mbps, rps)
+	return nil
 }
 
-func getTablesToBackup(conn *exasol.Conn, crit criteria) ([]*table, []dbObj) {
+func getTablesToBackup(conn *exasol.Conn, crit Criteria) ([]*table, []dbObj, error) {
 	sql := fmt.Sprintf(`
-		SELECT table_schema AS s, table_name AS o, table_row_count
+		SELECT table_schema AS s,
+			   table_name AS o,
+			   table_row_count,
+			   table_comment
 		FROM exa_all_tables
-		WHERE %s
+		WHERE table_is_virtual = FALSE
+		  AND (%s)
 		ORDER BY table_schema, table_name
 		`, crit.getSQLCriteria(),
 	)
 	res, err := conn.FetchSlice(sql)
 	if err != nil {
-		log.Fatal(err)
+		return nil, nil, fmt.Errorf("Unable to get tables: %s", err)
 	}
 	tables := []*table{}
 	dbObjs := []dbObj{}
 	for _, row := range res {
 		t := &table{
 			schema: row[0].(string),
-			table:  row[1].(string),
+			name:   row[1].(string),
 		}
 		if row[2] != nil {
 			t.rowCount = row[2].(float64)
 		}
+		if row[3] != nil {
+			t.comment = row[3].(string)
+		}
 		tables = append(tables, t)
 		dbObjs = append(dbObjs, t)
 	}
-	return tables, dbObjs
+	return tables, dbObjs, nil
 }
 
-func addTableColumns(conn *exasol.Conn, tables []*table, crit criteria) {
+func addTableColumns(conn *exasol.Conn, tables []*table, crit Criteria) error {
 	sql := fmt.Sprintf(`
 		SELECT column_schema AS s,
 			   column_table  AS o,
@@ -152,13 +184,14 @@ func addTableColumns(conn *exasol.Conn, tables []*table, crit criteria) {
 			   column_comment
 		FROM exa_all_columns
 		WHERE column_object_type = 'TABLE'
+		  AND column_is_virtual = FALSE
 		  AND (%s)
 		ORDER BY column_schema, column_table, column_ordinal_position
 		`, crit.getSQLCriteria(),
 	)
 	res, err := conn.FetchSlice(sql)
 	if err != nil {
-		log.Fatal(err)
+		return fmt.Errorf("Unable to get table columns: %s", err)
 	}
 
 	for _, row := range res {
@@ -180,20 +213,21 @@ func addTableColumns(conn *exasol.Conn, tables []*table, crit criteria) {
 		var table *table
 		for _, t := range tables {
 			if t.schema == schemaName &&
-				t.table == tableName {
+				t.name == tableName {
 				table = t
 				break
 			}
 		}
 		if table == nil {
-			log.Fatal("Cannot find table", schemaName, tableName)
+			return fmt.Errorf("Unable to find table %s.%s for column", schemaName, tableName)
 		}
 
 		table.columns = append(table.columns, col)
 	}
+	return nil
 }
 
-func addTableConstraints(conn *exasol.Conn, tables []*table, crit criteria) {
+func addTableConstraints(conn *exasol.Conn, tables []*table, crit Criteria) error {
 	sql := fmt.Sprintf(`
 		SELECT con.constraint_schema AS s,
 			   con.constraint_table  AS o,
@@ -221,7 +255,7 @@ func addTableConstraints(conn *exasol.Conn, tables []*table, crit criteria) {
 	)
 	res, err := conn.FetchSlice(sql)
 	if err != nil {
-		log.Fatal(err)
+		return fmt.Errorf("Unable to get table constraints: %s", err)
 	}
 
 	for _, row := range res {
@@ -236,32 +270,41 @@ func addTableConstraints(conn *exasol.Conn, tables []*table, crit criteria) {
 		var table *table
 		for _, t := range tables {
 			if t.schema == schemaName &&
-				t.table == tableName {
+				t.name == tableName {
 				table = t
 				break
 			}
 		}
 		if table == nil {
-			log.Fatal("Cannot find table", schemaName, tableName)
+			return fmt.Errorf("Unable to find table %s.%s for constraint", schemaName, tableName)
 		}
 
 		table.constraints = append(table.constraints, con)
 	}
+	return nil
 }
 
-func writeTables(dst string, in <-chan *table, crit criteria, maxRows int, wg *sync.WaitGroup) {
+func writeTables(dst string, in <-chan *table, crit Criteria, maxRows int, errors chan<- error, wg *sync.WaitGroup) {
 	for t := range in {
 		dir := filepath.Join(dst, "schemas", t.schema, "tables")
 		os.MkdirAll(dir, os.ModePerm)
-		createTable(dir, t)
-		writeTableData(dir, t, maxRows)
+		err := createTable(dir, t)
+		if err != nil {
+			errors <- err
+			return
+		}
+		err = writeTableData(dir, t, maxRows)
+		if err != nil {
+			errors <- err
+			return
+		}
 		t.data = nil // otherwise seems to leak mem
 	}
 
 	wg.Done()
 }
 
-func createTable(dir string, t *table) {
+func createTable(dir string, t *table) error {
 	var cols []string
 	for _, c := range t.columns {
 		col := fmt.Sprintf(`"%s" %s`, c.name, c.colType)
@@ -284,7 +327,7 @@ func createTable(dir string, t *table) {
 			}
 		}
 		if c.comment != "" {
-			col += fmt.Sprintf(" COMMENT IS '%s'", exasol.QuoteStr(c.comment))
+			col += fmt.Sprintf(" COMMENT IS '%s'", qStr(c.comment))
 		}
 		cols = append(cols, col)
 	}
@@ -306,34 +349,35 @@ func createTable(dir string, t *table) {
 
 	sql := fmt.Sprintf(
 		"CREATE OR REPLACE TABLE \"%s\".\"%s\" (\n\t%s\n);\n",
-		t.schema, t.table, strings.Join(cols, ",\n\t"),
+		t.schema, t.name, strings.Join(cols, ",\n\t"),
 	)
-	file := filepath.Join(dir, t.table+".sql")
+	if t.comment != "" {
+		sql += fmt.Sprintf("COMMENT ON TABLE [%s] IS '%s';\n", t.name, qStr(t.comment))
+	}
+	file := filepath.Join(dir, t.name+".sql")
 
 	err := ioutil.WriteFile(file, []byte(sql), 0644)
 	if err != nil {
-		log.Fatal("Unable to backup table", sql, err)
+		return fmt.Errorf("Unable to backup table %s.%s: %s", t.schema, t.name, err)
 	}
+	return nil
 }
 
-func writeTableData(dir string, t *table, maxRows int) {
+func writeTableData(dir string, t *table, maxRows int) error {
 	if t.rowCount == 0 || t.rowCount > float64(maxRows) {
-		return
+		return nil
 	}
-	fp := filepath.Join(dir, t.table+".csv")
+	fp := filepath.Join(dir, t.name+".csv")
 	f, err := os.Create(fp)
 	if err != nil {
-		log.Fatal("Unable to create file", fp, err)
+		return fmt.Errorf("Unable to create file %s: %s", fp, err)
 	}
 	for d := range t.data {
 		_, err = f.Write(d)
 		if err != nil {
-			log.Fatal("Unable to write to file", fp, err)
+			return fmt.Errorf("Unable to write to file %s: %s", fp, err)
 		}
 	}
 	f.Close()
-}
-
-func (t *table) qTable() string {
-	return fmt.Sprintf("[%s]", t.table)
+	return nil
 }

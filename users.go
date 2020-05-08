@@ -16,13 +16,16 @@ type user struct {
 	comment  string
 }
 
-func BackupUsers(src *exasol.Conn, dst string, dropExtras bool) {
-	log.Notice("Backingup users")
+func BackupUsers(src *exasol.Conn, dst string, dropExtras bool) error {
+	log.Notice("Backing up users")
 
-	users := getUsersToBackup(src)
+	users, err := getUsersToBackup(src)
+	if err != nil {
+		return err
+	}
 	if len(users) == 0 {
 		log.Warning("No users found")
-		return
+		return nil
 	}
 
 	dir := filepath.Join(dst, "users")
@@ -34,16 +37,23 @@ func BackupUsers(src *exasol.Conn, dst string, dropExtras bool) {
 
 	var userNames []string
 	for _, user := range users {
-		backupUser(dir, user)
+		err = backupUser(dir, user)
+		if err != nil {
+			return err
+		}
 		userNames = append(userNames, user.name)
 	}
 
-	BackupPrivileges(src, dir, userNames)
+	err = BackupPrivileges(src, dir, userNames)
+	if err != nil {
+		return err
+	}
 
-	log.Info("Done backingup users")
+	log.Info("Done backing up users")
+	return nil
 }
 
-func getUsersToBackup(conn *exasol.Conn) []*user {
+func getUsersToBackup(conn *exasol.Conn) ([]*user, error) {
 	sql := fmt.Sprintf(`
 		SELECT user_name AS s,
 			   user_name AS o,
@@ -56,7 +66,7 @@ func getUsersToBackup(conn *exasol.Conn) []*user {
 	)
 	res, err := conn.FetchSlice(sql)
 	if err != nil {
-		log.Fatal(err)
+		return nil, fmt.Errorf("Unable to get users: %s", err)
 	}
 	users := []*user{}
 	for _, row := range res {
@@ -73,12 +83,13 @@ func getUsersToBackup(conn *exasol.Conn) []*user {
 		}
 		users = append(users, u)
 	}
-	return users
+	return users, nil
 }
 
-func backupUser(dst string, u *user) {
-	log.Noticef("Backingup user %s", u.name)
+func backupUser(dst string, u *user) error {
+	log.Noticef("Backing up user %s", u.name)
 
+	sql := ""
 	dn := u.ldapDN
 	if dn == "" {
 		// If the user is setup with a non-LDAP account
@@ -90,21 +101,23 @@ func backupUser(dst string, u *user) {
 		// in manually later and change the password so in
 		// the meantime we set an invalid password by
 		// setting it to an invalid LDAP distinguished name.
-		dn = "MUST CHANGE PASSWORD"
+		sql = fmt.Sprintf("CREATE USER %s IDENTIFIED BY ********;\n", u.name)
+	} else {
+		sql = fmt.Sprintf("CREATE USER %s IDENTIFIED AT LDAP AS '%s';\n", u.name, dn)
 	}
-	sql := fmt.Sprintf("CREATE USER %s IDENTIFIED AT LDAP AS '%s';\n", u.name, dn)
 
 	if u.priority != "" {
 		sql += fmt.Sprintf("GRANT PRIORITY %s TO %s;\n", u.priority, u.name)
 	}
 
 	if u.comment != "" {
-		sql += fmt.Sprintf("COMMENT ON USER %s IS '%s';\n", u.name, exasol.QuoteStr(u.comment))
+		sql += fmt.Sprintf("COMMENT ON USER %s IS '%s';\n", u.name, qStr(u.comment))
 	}
 
 	file := filepath.Join(dst, u.name+".sql")
 	err := ioutil.WriteFile(file, []byte(sql), 0644)
 	if err != nil {
-		log.Fatal("Unable to backup user", sql, err)
+		return fmt.Errorf("Unable to backup user %s: %s", u.name, err)
 	}
+	return nil
 }

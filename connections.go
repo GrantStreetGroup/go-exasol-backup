@@ -18,13 +18,16 @@ type connection struct {
 	comment  string
 }
 
-func BackupConnections(src *exasol.Conn, dst string) {
-	log.Notice("Backingup connections")
+func BackupConnections(src *exasol.Conn, dst string) error {
+	log.Notice("Backing up connections")
 
-	connections := getConnectionsToBackup(src)
+	connections, err := getConnectionsToBackup(src)
+	if err != nil {
+		return err
+	}
 	if len(connections) == 0 {
 		log.Warning("No connections found")
-		return
+		return nil
 	}
 
 	var sql string
@@ -33,15 +36,16 @@ func BackupConnections(src *exasol.Conn, dst string) {
 	}
 	os.MkdirAll(dst, os.ModePerm)
 	file := filepath.Join(dst, "connections.sql")
-	err := ioutil.WriteFile(file, []byte(sql), 0644)
+	err = ioutil.WriteFile(file, []byte(sql), 0644)
 	if err != nil {
-		log.Fatal("Unable to backup parameters", sql, err)
+		return fmt.Errorf("Unable to backup connections: %s", err)
 	}
 
-	log.Info("Done backingup connections")
+	log.Info("Done backing up connections")
+	return nil
 }
 
-func getConnectionsToBackup(conn *exasol.Conn) []*connection {
+func getConnectionsToBackup(conn *exasol.Conn) ([]*connection, error) {
 	sql := fmt.Sprintf(`
 		SELECT connection_name AS s,
 			   connection_name AS o,
@@ -53,7 +57,7 @@ func getConnectionsToBackup(conn *exasol.Conn) []*connection {
 	)
 	res, err := conn.FetchSlice(sql)
 	if err != nil {
-		log.Fatal(err)
+		return nil, fmt.Errorf("Unable to get connections to backup: %s", err)
 	}
 	connections := []*connection{}
 	for _, row := range res {
@@ -69,21 +73,20 @@ func getConnectionsToBackup(conn *exasol.Conn) []*connection {
 		}
 		connections = append(connections, c)
 	}
-	return connections
+	return connections, nil
 }
 
 func createConnection(c *connection) string {
-	log.Noticef("Backingup connection %s", c.name)
+	log.Noticef("Backing up connection %s", c.name)
 	sql := fmt.Sprintf(
-		"CREATE CONNECTION %s TO '%s' USER '%s' IDENTIFIED BY '';\n",
-		c.name, c.connStr, c.username,
+		"CREATE CONNECTION [%s] TO '%s' USER '%s' IDENTIFIED BY ********;\n",
+		c.name, qStr(c.connStr), c.username,
 	)
 	if c.comment != "" {
 		sql += fmt.Sprintf(
-			"COMMENT ON CONNECTION %s IS '%s';\n",
-			c.name, exasol.QuoteStr(c.comment),
+			"COMMENT ON CONNECTION [%s] IS '%s';\n",
+			c.name, qStr(c.comment),
 		)
 	}
 	return sql
-
 }

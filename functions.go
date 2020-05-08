@@ -10,40 +10,49 @@ import (
 )
 
 type function struct {
-	schema   string
-	function string
-	text     string
+	schema  string
+	name    string
+	text    string
+	comment string
 }
 
 func (f *function) Schema() string { return f.schema }
-func (f *function) Name() string   { return f.function }
+func (f *function) Name() string   { return f.name }
 
-func BackupFunctions(src *exasol.Conn, dst string, crit criteria, dropExtras bool) {
-	log.Notice("Backingup functions")
+func BackupFunctions(src *exasol.Conn, dst string, crit Criteria, dropExtras bool) error {
+	log.Notice("Backing up functions")
 
-	allFuncs, dbObjs := getFunctionsToBackup(src, crit)
+	allFuncs, dbObjs, err := getFunctionsToBackup(src, crit)
+	if err != nil {
+		return err
+	}
 	if dropExtras {
 		removeExtraObjects("functions", dbObjs, dst, crit)
 	}
 
 	if len(allFuncs) == 0 {
 		log.Warning("Object criteria did not match any functions")
-		return
+		return nil
 	}
 
 	for _, f := range allFuncs {
 		dir := filepath.Join(dst, "schemas", f.schema, "functions")
 		os.MkdirAll(dir, os.ModePerm)
-		createFunction(dir, f)
+		err = createFunction(dir, f)
+		if err != nil {
+			return err
+		}
 	}
-	log.Info("Done backingup functions")
+	log.Info("Done backing up functions")
+	return nil
 }
 
-func getFunctionsToBackup(conn *exasol.Conn, crit criteria) ([]*function, []dbObj) {
+func getFunctionsToBackup(conn *exasol.Conn, crit Criteria) ([]*function, []dbObj, error) {
 	sql := fmt.Sprintf(`
 		SELECT function_schema AS s,
 			   function_name   AS o,
-			   function_text
+			   function_text,
+			   function_comment
 		FROM exa_all_functions
 		WHERE %s
 		ORDER BY local.s, local.o
@@ -51,29 +60,36 @@ func getFunctionsToBackup(conn *exasol.Conn, crit criteria) ([]*function, []dbOb
 	)
 	res, err := conn.FetchSlice(sql)
 	if err != nil {
-		log.Fatal(err)
+		return nil, nil, fmt.Errorf("Unable to get functions to backup: %s", err)
 	}
 	functions := []*function{}
 	dbObjs := []dbObj{}
 	for _, row := range res {
 		f := &function{
-			schema:   row[0].(string),
-			function: row[1].(string),
-			text:     row[2].(string),
+			schema: row[0].(string),
+			name:   row[1].(string),
+			text:   row[2].(string),
+		}
+		if row[3] != nil {
+			f.comment = row[3].(string)
 		}
 		functions = append(functions, f)
 		dbObjs = append(dbObjs, f)
 	}
-	return functions, dbObjs
+	return functions, dbObjs, nil
 }
 
-func createFunction(dst string, f *function) {
-	log.Noticef("Backingup function %s.%s", f.schema, f.function)
+func createFunction(dst string, f *function) error {
+	log.Noticef("Backing up function %s.%s", f.schema, f.name)
 	createFunction := "CREATE OR REPLACE " + f.text
-	sql := fmt.Sprintf("OPEN SCHEMA %s;\n--/\n%s;\n", f.schema, createFunction)
-	file := filepath.Join(dst, f.function+".sql")
+	sql := fmt.Sprintf("OPEN SCHEMA [%s];\n--/\n%s;\n", f.schema, createFunction)
+	if f.comment != "" {
+		sql += fmt.Sprintf("COMMENT ON FUNCTION [%s] IS '%s';\n", f.name, qStr(f.comment))
+	}
+	file := filepath.Join(dst, f.name+".sql")
 	err := ioutil.WriteFile(file, []byte(sql), 0644)
 	if err != nil {
-		log.Fatal("Unable to backup function", sql, err)
+		return fmt.Errorf("Unable to backup function: %s", err)
 	}
+	return nil
 }

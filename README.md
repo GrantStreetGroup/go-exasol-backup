@@ -1,12 +1,34 @@
 # go-exasol-backup
 
-A Go library for backingup Exasol metadata and optionally data to text files.
+A Go utility for backing up Exasol metadata and, optionally, data to text files.
 Metadata includes DDL, users, roles, connections, permissions and system parameters.
 The metadata is stored as SQL and data is stored as CSV.
 
-## Examples
+## Synopsis
 
-TBD
+```go
+import (
+	"github.com/grantstreetgroup/go-exasol-backup"
+	"github.com/grantstreetgroup/go-exasol-client"
+)
+
+func main() {
+	err := backup.Backup(backup.Conf{
+		Source:      exasol.Connect(exasol.ConnConf{ ... })
+		Destination: "/directory/to/backup/to/",
+		Objects:     []backup.Object{backup.ALL},
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+}
+```
+
+See the backup.go source for more Conf options.
+
+## TODOS
+  - Backup priority groups
+  - Backup schema raw size limits
 
 # Author
 

@@ -9,22 +9,41 @@ import (
 	"github.com/grantstreetgroup/go-exasol-client"
 )
 
-func BackupPrivileges(src *exasol.Conn, dst string, grantees []string) {
+func BackupPrivileges(src *exasol.Conn, dst string, grantees []string) error {
 	for i := range grantees {
 		grantees[i] = "'" + grantees[i] + "'"
 	}
-	backupConnectionPrivs(src, dst, grantees)
-	backupObjectPrivs(src, dst, grantees)
-	backupRestrictedObjectPrivs(src, dst, grantees)
-	backupRolePrivs(src, dst, grantees)
-	backupSystemPrivs(src, dst, grantees)
-	backupSchemaOwners(src, dst, grantees)
+	err := backupConnectionPrivs(src, dst, grantees)
+	if err != nil {
+		return err
+	}
+	err = backupObjectPrivs(src, dst, grantees)
+	if err != nil {
+		return err
+	}
+	err = backupRestrictedObjectPrivs(src, dst, grantees)
+	if err != nil {
+		return err
+	}
+	err = backupRolePrivs(src, dst, grantees)
+	if err != nil {
+		return err
+	}
+	err = backupSystemPrivs(src, dst, grantees)
+	if err != nil {
+		return err
+	}
+	err = backupSchemaOwners(src, dst, grantees)
+	if err != nil {
+		return err
+	}
 
-	log.Info("Done backingup privileges")
+	log.Info("Done backing up privileges")
+	return nil
 }
 
-func backupConnectionPrivs(src *exasol.Conn, dst string, grantees []string) {
-	log.Notice("Backingup connection privileges")
+func backupConnectionPrivs(src *exasol.Conn, dst string, grantees []string) error {
+	log.Notice("Backing up connection privileges")
 
 	sql := fmt.Sprintf(`
 		SELECT grantee, granted_connection, admin_option
@@ -34,23 +53,27 @@ func backupConnectionPrivs(src *exasol.Conn, dst string, grantees []string) {
 	)
 	res, err := src.FetchSlice(sql)
 	if err != nil {
-		log.Fatal("Unable to get connection privs", err)
+		return fmt.Errorf("Unable to get connection privs: %s", err)
 	}
 	for _, row := range res {
 		grantee := row[0].(string)
 		connection := row[1].(string)
 		adminOption := row[2].(bool)
-		sql := fmt.Sprintf("GRANT CONNECTION %s TO %s", connection, grantee)
+		sql := fmt.Sprintf("GRANT CONNECTION [%s] TO %s", connection, grantee)
 		if adminOption {
 			sql += " WITH ADMIN OPTION"
 		}
 		sql += ";\n"
-		appendToObjFile(dst, grantee, sql)
+		err = appendToObjFile(dst, grantee, sql)
+		if err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
-func backupObjectPrivs(src *exasol.Conn, dst string, grantees []string) {
-	log.Notice("Backingup object privileges")
+func backupObjectPrivs(src *exasol.Conn, dst string, grantees []string) error {
+	log.Notice("Backing up object privileges")
 
 	sql := fmt.Sprintf(`
 		SELECT object_schema, object_name, object_type,
@@ -61,7 +84,7 @@ func backupObjectPrivs(src *exasol.Conn, dst string, grantees []string) {
 	)
 	res, err := src.FetchSlice(sql)
 	if err != nil {
-		log.Fatal("Unable to get object privs", err)
+		return fmt.Errorf("Unable to get object privs: %s", err)
 	}
 	for _, row := range res {
 		objType := row[2].(string)
@@ -72,16 +95,20 @@ func backupObjectPrivs(src *exasol.Conn, dst string, grantees []string) {
 		if objType == "SCHEMA" {
 			object = row[1].(string)
 		} else {
-			object = row[0].(string) + "." + row[1].(string)
+			object = row[0].(string) + "].[" + row[1].(string)
 		}
 
-		sql := fmt.Sprintf("GRANT %s ON %s %s TO %s;\n", privilege, objType, object, grantee)
-		appendToObjFile(dst, grantee, sql)
+		sql := fmt.Sprintf("GRANT %s ON %s [%s] TO %s;\n", privilege, objType, object, grantee)
+		err = appendToObjFile(dst, grantee, sql)
+		if err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
-func backupRestrictedObjectPrivs(src *exasol.Conn, dst string, grantees []string) {
-	log.Notice("Backingup restricted object privileges")
+func backupRestrictedObjectPrivs(src *exasol.Conn, dst string, grantees []string) error {
+	log.Notice("Backing up restricted object privileges")
 
 	sql := fmt.Sprintf(`
 		SELECT object_schema, object_name, object_type,
@@ -93,7 +120,7 @@ func backupRestrictedObjectPrivs(src *exasol.Conn, dst string, grantees []string
 	)
 	res, err := src.FetchSlice(sql)
 	if err != nil {
-		log.Fatal("Unable to get restricted object privs", err)
+		return fmt.Errorf("Unable to get restricted object privs: %s", err)
 	}
 	for _, row := range res {
 		objType := row[2].(string)
@@ -105,25 +132,29 @@ func backupRestrictedObjectPrivs(src *exasol.Conn, dst string, grantees []string
 		if row[0] == nil {
 			object = row[1].(string)
 		} else {
-			object = row[0].(string) + `"."` + row[1].(string)
+			object = row[0].(string) + `"].["` + row[1].(string)
 		}
 		var forObject string
 		if row[3] == nil {
 			forObject = row[4].(string)
 		} else {
-			forObject = row[3].(string) + `"."` + row[4].(string)
+			forObject = row[3].(string) + `"].["` + row[4].(string)
 		}
 
 		sql := fmt.Sprintf(
-			`GRANT %s ON %s "%s" FOR %s "%s" TO "%s";`+"\n",
+			`GRANT %s ON %s [%s] FOR %s [%s] TO %s;`+"\n",
 			privilege, objType, object, forObjType, forObject, grantee,
 		)
-		appendToObjFile(dst, grantee, sql)
+		err = appendToObjFile(dst, grantee, sql)
+		if err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
-func backupRolePrivs(src *exasol.Conn, dst string, grantees []string) {
-	log.Notice("Backingup role privileges")
+func backupRolePrivs(src *exasol.Conn, dst string, grantees []string) error {
+	log.Notice("Backing up role privileges")
 
 	sql := fmt.Sprintf(`
 		SELECT grantee, granted_role, admin_option
@@ -133,7 +164,7 @@ func backupRolePrivs(src *exasol.Conn, dst string, grantees []string) {
 	)
 	res, err := src.FetchSlice(sql)
 	if err != nil {
-		log.Fatal("Unable to get role privs", err)
+		return fmt.Errorf("Unable to get role privs: %s", err)
 	}
 	for _, row := range res {
 		grantee := row[0].(string)
@@ -145,12 +176,16 @@ func backupRolePrivs(src *exasol.Conn, dst string, grantees []string) {
 			sql += " WITH ADMIN OPTION"
 		}
 		sql += ";\n"
-		appendToObjFile(dst, grantee, sql)
+		err = appendToObjFile(dst, grantee, sql)
+		if err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
-func backupSystemPrivs(src *exasol.Conn, dst string, grantees []string) {
-	log.Notice("Backingup system privileges")
+func backupSystemPrivs(src *exasol.Conn, dst string, grantees []string) error {
+	log.Notice("Backing up system privileges")
 
 	sql := fmt.Sprintf(`
 		SELECT grantee, privilege, admin_option
@@ -160,7 +195,7 @@ func backupSystemPrivs(src *exasol.Conn, dst string, grantees []string) {
 	)
 	res, err := src.FetchSlice(sql)
 	if err != nil {
-		log.Fatal("Unable to get sys privs", err)
+		return fmt.Errorf("Unable to get sys privs: %s", err)
 	}
 	for _, row := range res {
 		grantee := row[0].(string)
@@ -172,25 +207,29 @@ func backupSystemPrivs(src *exasol.Conn, dst string, grantees []string) {
 			sql += " WITH ADMIN OPTION"
 		}
 		sql += ";\n"
-		appendToObjFile(dst, grantee, sql)
+		err = appendToObjFile(dst, grantee, sql)
+		if err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
-func backupSchemaOwners(src *exasol.Conn, dst string, grantees []string) {
-	log.Notice("Backingup schema owners")
+func backupSchemaOwners(src *exasol.Conn, dst string, grantees []string) error {
+	log.Notice("Backing up schema owners")
 
 	sql := fmt.Sprintf(`
 	    SELECT DISTINCT s.schema_name, s.schema_owner,
             (vs.schema_name IS NOT NULL) AS is_virtual
         FROM exa_schemas AS s
-        LEFT JOIN exa_dba_virtual_schemas AS vs
+        LEFT JOIN exa_all_virtual_schemas AS vs
           ON s.schema_name = vs.schema_name
         WHERE s.schema_owner IN (%s)
 		`, strings.Join(grantees, ","),
 	)
 	res, err := src.FetchSlice(sql)
 	if err != nil {
-		log.Fatal("Unable to get schema owner", err)
+		return fmt.Errorf("Unable to get schema owner: %s", err)
 	}
 	for _, row := range res {
 		schema := row[0].(string)
@@ -201,20 +240,25 @@ func backupSchemaOwners(src *exasol.Conn, dst string, grantees []string) {
 			virtual = "VIRTUAL "
 		}
 
-		sql := fmt.Sprintf("ALTER %sSCHEMA %s CHANGE OWNER %s;\n", virtual, schema, owner)
-		appendToObjFile(dst, owner, sql)
+		sql := fmt.Sprintf("ALTER %sSCHEMA [%s] CHANGE OWNER %s;\n", virtual, schema, owner)
+		err = appendToObjFile(dst, owner, sql)
+		if err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
-func appendToObjFile(dst, user, sql string) {
+func appendToObjFile(dst, user, sql string) error {
 	fp := filepath.Join(dst, user+".sql")
 	f, err := os.OpenFile(fp, os.O_APPEND|os.O_WRONLY, 0644)
 	if err != nil {
-		log.Fatal("Unable to open file", fp, err)
+		return fmt.Errorf("Unable to open file '%s': %s", fp, err)
 	}
 	_, err = f.Write([]byte(sql))
 	if err != nil {
-		log.Fatal("Unable to write ", fp, sql, err)
+		return fmt.Errorf("Unable to write to file '%s': %s", fp, err)
 	}
 	f.Close()
+	return nil
 }

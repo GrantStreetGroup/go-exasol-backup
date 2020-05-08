@@ -12,51 +12,70 @@ import (
 )
 
 type view struct {
-	schema string
-	view   string
-	scope  string
-	text   string
+	schema  string
+	name    string
+	scope   string
+	text    string
+	comment string
 }
 
 func (v *view) Schema() string { return v.schema }
-func (v *view) Name() string   { return v.view }
+func (v *view) Name() string   { return v.name }
 
-func BackupViews(src *exasol.Conn, dst string, crit criteria, maxRows int, dropExtras bool) {
-	log.Notice("Backingup views")
+func BackupViews(src *exasol.Conn, dst string, crit Criteria, maxRows int, dropExtras bool) error {
+	log.Notice("Backing up views")
 
-	views, dbObjs := getViewsToBackup(src, crit)
+	views, dbObjs, err := getViewsToBackup(src, crit)
+	if err != nil {
+		return err
+	}
 	if dropExtras {
 		removeExtraObjects("views", dbObjs, dst, crit)
 	}
 	if len(views) == 0 {
 		log.Warning("Object criteria did not match any views")
-		return
+		return nil
 	}
 
 	for _, v := range views {
 		dir := filepath.Join(dst, "schemas", v.schema, "views")
 		os.MkdirAll(dir, os.ModePerm)
-		backupView(dir, v)
-		if shouldBackupViewData(src, v, maxRows) {
-			log.Noticef("Backingup view data for %s.%s", v.schema, v.view)
+		err = backupView(dir, v)
+		if err != nil {
+			return err
+		}
+		shouldBackup, err := shouldBackupViewData(src, v, maxRows)
+		if err != nil {
+			return err
+		}
+		if shouldBackup {
+			log.Noticef("Backing up view data for %s.%s", v.schema, v.name)
 			wg := &sync.WaitGroup{}
 			wg.Add(2)
 			data := make(chan []byte)
-			go readViewData(src, v, data, wg)
-			go writeViewData(dir, v, data, wg)
+			errors := make(chan error, 2)
+			go readViewData(src, v, data, errors, wg)
+			go writeViewData(dir, v, data, errors, wg)
 			wg.Wait()
+			select {
+			case err = <-errors:
+				return err
+			default:
+			}
 		}
 	}
 
-	log.Info("Done backingup views")
+	log.Info("Done backing up views")
+	return nil
 }
 
-func getViewsToBackup(conn *exasol.Conn, crit criteria) ([]*view, []dbObj) {
+func getViewsToBackup(conn *exasol.Conn, crit Criteria) ([]*view, []dbObj, error) {
 	sql := fmt.Sprintf(`
 		SELECT view_schema AS s,
 			   view_name   AS o,
 			   scope_schema,
-			   view_text
+			   view_text,
+			   view_comment
 		FROM exa_all_views
 		WHERE %s
 		ORDER BY local.s, local.o
@@ -64,14 +83,14 @@ func getViewsToBackup(conn *exasol.Conn, crit criteria) ([]*view, []dbObj) {
 	)
 	res, err := conn.FetchSlice(sql)
 	if err != nil {
-		log.Fatal(err)
+		return nil, nil, fmt.Errorf("Unable to get views: %s", err)
 	}
 	views := []*view{}
 	dbObjs := []dbObj{}
 	for _, row := range res {
 		v := &view{
 			schema: row[0].(string),
-			view:   row[1].(string),
+			name:   row[1].(string),
 			text:   row[3].(string),
 		}
 		if row[2] == nil {
@@ -79,73 +98,80 @@ func getViewsToBackup(conn *exasol.Conn, crit criteria) ([]*view, []dbObj) {
 		} else {
 			v.scope = row[2].(string)
 		}
+		if row[4] != nil {
+			v.comment = row[4].(string)
+		}
 		views = append(views, v)
 		dbObjs = append(dbObjs, v)
 	}
-	return views, dbObjs
+	return views, dbObjs, nil
 }
 
-func backupView(dir string, v *view) {
-	log.Noticef("Backingup view %s.%s", v.schema, v.view)
+func backupView(dir string, v *view) error {
+	log.Noticef("Backing up view %s.%s", v.schema, v.name)
 
 	// We have to swap out the name too because if the view got renamed
 	// the v.text still references the original name.
 	r := regexp.MustCompile(`^(?is).*?CREATE[^V]+?VIEW\s+("?[\w_-]+"?\.)?"?[\w_-]+"?`)
-	replacement := fmt.Sprintf(`CREATE OR REPLACE FORCE VIEW "%s"."%s"`, v.schema, v.view)
+	replacement := fmt.Sprintf(`CREATE OR REPLACE FORCE VIEW "%s"."%s"`, v.schema, v.name)
 	createView := r.ReplaceAllString(v.text, replacement)
 
-	sql := fmt.Sprintf("OPEN SCHEMA %s;\n%s;\n", v.scope, createView)
-	file := filepath.Join(dir, v.view+".sql")
+	sql := fmt.Sprintf("OPEN SCHEMA [%s];\n%s;\n", v.scope, createView)
+	if v.comment != "" {
+		sql += fmt.Sprintf("COMMENT ON VIEW [%s] IS '%s';\n", v.name, qStr(v.comment))
+	}
+	file := filepath.Join(dir, v.name+".sql")
 
 	err := ioutil.WriteFile(file, []byte(sql), 0644)
 	if err != nil {
-		log.Fatal("Unable to backup view", sql, err)
+		return fmt.Errorf("Unable to backup view %s: %s", v.name, err)
 	}
+	return nil
 }
 
-func shouldBackupViewData(conn *exasol.Conn, v *view, maxRows int) bool {
+func shouldBackupViewData(conn *exasol.Conn, v *view, maxRows int) (bool, error) {
 	if maxRows == 0 {
-		return false
+		return false, nil
 	}
-	sql := fmt.Sprintf(
-		`SELECT COUNT(*)FROM %s.%s`,
-		conn.QuoteIdent(v.schema), conn.QuoteIdent(v.view),
-	)
+	sql := fmt.Sprintf(`SELECT COUNT(*) FROM [%s].[%s]`, v.schema, v.name)
 	res, err := conn.FetchSlice(sql)
 	if err != nil {
-		log.Fatal(err)
+		return false, fmt.Errorf("Unable to number of view rows: %s", err)
 	}
 	numRows := int(res[0][0].(float64))
-	return numRows > 0 && numRows <= maxRows
+	return numRows > 0 && numRows <= maxRows, nil
 }
 
-func readViewData(conn *exasol.Conn, v *view, data chan<- []byte, wg *sync.WaitGroup) {
+func readViewData(conn *exasol.Conn, v *view, data chan<- []byte, errors chan<- error, wg *sync.WaitGroup) {
 	defer func() {
 		close(data)
 		wg.Done()
 	}()
 
 	exportSQL := fmt.Sprintf(
-		"EXPORT (SELECT * FROM %s.%s) INTO CSV AT '%%s' FILE 'data.csv'",
-		conn.QuoteIdent(v.schema), conn.QuoteIdent(v.view),
+		"EXPORT (SELECT * FROM [%s].[%s]) INTO CSV AT '%%s' FILE 'data.csv'",
+		v.schema, v.name,
 	)
 	_, err := conn.StreamQuery(exportSQL, data)
 	if err != nil {
-		log.Fatal("Unable to read:", err)
+		errors <- fmt.Errorf("Unable to read view %s: %s", v.name, err)
+		return
 	}
 }
 
-func writeViewData(dst string, v *view, data <-chan []byte, wg *sync.WaitGroup) {
+func writeViewData(dst string, v *view, data <-chan []byte, errors chan<- error, wg *sync.WaitGroup) {
 	defer func() { wg.Done() }()
-	fp := filepath.Join(dst, v.view+".csv")
+	fp := filepath.Join(dst, v.name+".csv")
 	f, err := os.Create(fp)
 	if err != nil {
-		log.Fatal("Unable to create file", fp, err)
+		errors <- fmt.Errorf("Unable to create view file %s: %s", fp, err)
+		return
 	}
 	for d := range data {
 		_, err = f.Write(d)
 		if err != nil {
-			log.Fatal("Unable to write to file", fp, err)
+			errors <- fmt.Errorf("Unable to write view file %s: %s", fp, err)
+			return
 		}
 	}
 	f.Close()
