@@ -45,14 +45,13 @@ func BackupParameters(src *exasol.Conn, dst string) error {
 }
 
 func getParametersToBackup(conn *exasol.Conn) ([]*parameter, error) {
-	sql := fmt.Sprintf(`
-		SELECT parameter_name AS s,
-			   parameter_name AS o,
+	sql := `
+		SELECT parameter_name,
 			   system_value
 		FROM exa_parameters
 		WHERE parameter_name != 'NICE'
-		ORDER BY local.s`,
-	)
+		ORDER BY parameter_name
+	`
 	res, err := conn.FetchSlice(sql)
 	if err != nil {
 		return nil, fmt.Errorf("Unable to get parameters to backup: %s", err)
@@ -61,8 +60,8 @@ func getParametersToBackup(conn *exasol.Conn) ([]*parameter, error) {
 	for _, row := range res {
 		p := &parameter{name: row[0].(string)}
 
-		if row[2] != nil {
-			p.value = row[2].(string)
+		if row[1] != nil {
+			p.value = row[1].(string)
 		}
 		parameters = append(parameters, p)
 	}

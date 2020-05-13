@@ -28,6 +28,7 @@ const (
 	CONNECTIONS
 	FUNCTIONS
 	PARAMETERS
+	PRIORITY_GROUPS
 	ROLES
 	SCHEMAS // This would backup the (virtual)schema itself but nothing under it
 	SCRIPTS
@@ -48,9 +49,9 @@ type Conf struct {
 	// Any schema object matching one of these patterns will be backedup.
 	// Each pattern should be in the form of "schema.object".
 	// If the object is not specified "schema.*" is assumed.
-	// If not specified then "*.*" is assumed.
+	// If the schema not specified then "*.*" is assumed.
 	// Non-schema objects (users, roles, connections, parameters) are
-	// not affected by this config. i.e. they will all be backup if requested.
+	// not affected by this config. i.e. they will be backup all-or-none
 	Match string
 	// Skip is the inverse of Match.
 	// Any schema objects matching it will be skipped.
@@ -110,6 +111,12 @@ func Backup(cfg Conf) error {
 
 	if backup[PARAMETERS] || backup[ALL] {
 		err := BackupParameters(src, dst)
+		if err != nil {
+			return err
+		}
+	}
+	if backup[PRIORITY_GROUPS] || backup[ALL] {
+		err := BackupPriorityGroups(src, dst)
 		if err != nil {
 			return err
 		}

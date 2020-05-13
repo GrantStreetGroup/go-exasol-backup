@@ -82,11 +82,14 @@ func getScriptsToBackup(conn *exasol.Conn, crit Criteria) ([]*script, []dbObj, e
 
 func backupScript(dst string, s *script) error {
 	log.Noticef("Backing up script %s.%s", s.schema, s.name)
-	r := regexp.MustCompile(`^(?i)CREATE\s+(OR\s+REPLACE)?`)
-	createScript := r.ReplaceAllString(s.text, "CREATE OR REPLACE ")
-	sql := fmt.Sprintf("OPEN SCHEMA [%s];\n%s;\n", s.schema, createScript)
+	sText := regexp.MustCompile(`^CREATE `).
+		ReplaceAllString(s.text, "CREATE OR REPLACE ")
+	sql := fmt.Sprintf("OPEN SCHEMA [%s];\n--/\n%s\n/\n", s.schema, sText)
 	if s.comment != "" {
-		sql += fmt.Sprintf("COMMENT ON SCRIPT [%s] IS '%s';\n", s.name, qStr(s.comment))
+		sql += fmt.Sprintf(
+			"COMMENT ON SCRIPT [%s].[%s] IS '%s';\n",
+			s.schema, s.name, qStr(s.comment),
+		)
 	}
 
 	file := filepath.Join(dst, s.name+".sql")

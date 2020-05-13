@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"regexp"
 
 	"github.com/grantstreetgroup/go-exasol-client"
 )
@@ -81,10 +82,16 @@ func getFunctionsToBackup(conn *exasol.Conn, crit Criteria) ([]*function, []dbOb
 
 func createFunction(dst string, f *function) error {
 	log.Noticef("Backing up function %s.%s", f.schema, f.name)
-	createFunction := "CREATE OR REPLACE " + f.text
-	sql := fmt.Sprintf("OPEN SCHEMA [%s];\n--/\n%s;\n", f.schema, createFunction)
+	fText := regexp.MustCompile(`(?m)/\s*$`).ReplaceAllString(f.text, "")
+	sql := fmt.Sprintf(
+		"OPEN SCHEMA [%s];\n--/\nCREATE OR REPLACE %s\n/\n",
+		f.schema, fText,
+	)
 	if f.comment != "" {
-		sql += fmt.Sprintf("COMMENT ON FUNCTION [%s] IS '%s';\n", f.name, qStr(f.comment))
+		sql += fmt.Sprintf(
+			"COMMENT ON FUNCTION [%s].[%s] IS '%s';\n",
+			f.schema, f.name, qStr(f.comment),
+		)
 	}
 	file := filepath.Join(dst, f.name+".sql")
 	err := ioutil.WriteFile(file, []byte(sql), 0644)

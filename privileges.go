@@ -13,29 +13,20 @@ func BackupPrivileges(src *exasol.Conn, dst string, grantees []string) error {
 	for i := range grantees {
 		grantees[i] = "'" + grantees[i] + "'"
 	}
-	err := backupConnectionPrivs(src, dst, grantees)
-	if err != nil {
-		return err
+	privs := []func(*exasol.Conn, string, []string) error{
+		backupConnectionPrivs,
+		backupObjectPrivs,
+		backupRestrictedObjectPrivs,
+		backupRolePrivs,
+		backupSystemPrivs,
+		backupImpersonationPrivs,
+		backupSchemaOwners,
 	}
-	err = backupObjectPrivs(src, dst, grantees)
-	if err != nil {
-		return err
-	}
-	err = backupRestrictedObjectPrivs(src, dst, grantees)
-	if err != nil {
-		return err
-	}
-	err = backupRolePrivs(src, dst, grantees)
-	if err != nil {
-		return err
-	}
-	err = backupSystemPrivs(src, dst, grantees)
-	if err != nil {
-		return err
-	}
-	err = backupSchemaOwners(src, dst, grantees)
-	if err != nil {
-		return err
+	for _, backupPriv := range privs {
+		err := backupPriv(src, dst, grantees)
+		if err != nil {
+			return err
+		}
 	}
 
 	log.Info("Done backing up privileges")
@@ -59,7 +50,7 @@ func backupConnectionPrivs(src *exasol.Conn, dst string, grantees []string) erro
 		grantee := row[0].(string)
 		connection := row[1].(string)
 		adminOption := row[2].(bool)
-		sql := fmt.Sprintf("GRANT CONNECTION [%s] TO %s", connection, grantee)
+		sql := fmt.Sprintf("GRANT CONNECTION %s TO %s", connection, grantee)
 		if adminOption {
 			sql += " WITH ADMIN OPTION"
 		}
@@ -207,6 +198,32 @@ func backupSystemPrivs(src *exasol.Conn, dst string, grantees []string) error {
 			sql += " WITH ADMIN OPTION"
 		}
 		sql += ";\n"
+		err = appendToObjFile(dst, grantee, sql)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func backupImpersonationPrivs(src *exasol.Conn, dst string, grantees []string) error {
+	log.Notice("Backing up impersonation privileges")
+
+	sql := fmt.Sprintf(`
+		SELECT grantee, impersonation_on
+		FROM exa_dba_impersonation_privs
+		WHERE grantee IN (%s)
+		`, strings.Join(grantees, ","),
+	)
+	res, err := src.FetchSlice(sql)
+	if err != nil {
+		return fmt.Errorf("Unable to get impersonation privs: %s", err)
+	}
+	for _, row := range res {
+		grantee := row[0].(string)
+		impersonationOn := row[1].(string)
+
+		sql := fmt.Sprintf("GRANT IMPERSONATION ON %s TO %s;\n", impersonationOn, grantee)
 		err = appendToObjFile(dst, grantee, sql)
 		if err != nil {
 			return err

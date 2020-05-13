@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/grantstreetgroup/go-exasol-client"
 )
@@ -16,6 +17,7 @@ type schema struct {
 	comment      string
 	isVirtual    bool
 	adapter      string
+	sizeLimit    uint64
 	vSchemaProps []*vSchemaProp
 }
 
@@ -63,14 +65,18 @@ func BackupSchemas(src *exasol.Conn, dst string, crit Criteria, dropExtras bool)
 
 func getSchemasToBackup(conn *exasol.Conn, crit Criteria) ([]*schema, []dbObj, error) {
 	sql := fmt.Sprintf(`
-		SELECT schema_name AS s,
-			   schema_name AS o,
+		SELECT s.schema_name AS s,
+			   s.schema_name AS o,
 			   schema_comment,
 			   schema_is_virtual,
-			   adapter_script
-		FROM exa_schemas
-		LEFT JOIN exa_all_virtual_schemas
-			USING(schema_name)
+			   adapter_script,
+			   raw_object_size_limit
+		FROM exa_schemas AS s
+		JOIN exa_all_object_sizes AS os
+		  ON s.schema_name = os.object_name
+		 AND os.object_type = 'SCHEMA'
+		LEFT JOIN exa_all_virtual_schemas AS vs
+		  ON s.schema_name = vs.schema_name
 		WHERE %s
 		ORDER BY local.s
 		`, crit.getSQLCriteria(),
@@ -91,6 +97,9 @@ func getSchemasToBackup(conn *exasol.Conn, crit Criteria) ([]*schema, []dbObj, e
 		}
 		if row[4] != nil {
 			s.adapter = row[4].(string)
+		}
+		if row[5] != nil {
+			s.sizeLimit = uint64(row[5].(float64))
 		}
 		schemas = append(schemas, s)
 		dbObjs = append(dbObjs, s)
@@ -147,9 +156,10 @@ func createSchema(dst string, s *schema) error {
 				props += fmt.Sprintf("\n  %s = '%s'", p.name, qStr(p.value))
 			}
 		}
+		adapter := strings.Split(s.adapter, ".")
 		sql = fmt.Sprintf(
-			"CREATE VIRTUAL SCHEMA IF NOT EXISTS [%s]\nUSING %s%s;\n",
-			s.name, s.adapter, props,
+			"CREATE VIRTUAL SCHEMA IF NOT EXISTS [%s]\nUSING [%s].[%s]%s;\n",
+			s.name, adapter[0], adapter[1], props,
 		)
 	} else {
 		sql = fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS [%s];\n", s.name)
@@ -157,6 +167,9 @@ func createSchema(dst string, s *schema) error {
 
 	if s.comment != "" {
 		sql += fmt.Sprintf("COMMENT ON SCHEMA [%s] IS '%s';\n", s.name, qStr(s.comment))
+	}
+	if s.sizeLimit > 0 {
+		sql += fmt.Sprintf("ALTER SCHEMA [%s] SET RAW_SIZE_LIMIT = %d;\n", s.name, s.sizeLimit)
 	}
 
 	dir := filepath.Join(dst, s.name)
