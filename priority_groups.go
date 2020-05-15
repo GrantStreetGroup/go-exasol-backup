@@ -73,7 +73,16 @@ func getPriorityGroupsToBackup(conn *exasol.Conn) ([]*priorityGroup, error) {
 
 func createPriorityGroup(p *priorityGroup) string {
 	log.Noticef("Backing up priority group %s", p.name)
-	sql := fmt.Sprintf("CREATE PRIORITY GROUP [%s] WITH WEIGHT = %d;\n", p.name, p.weight)
+	sql := ""
+	if p.name == "MEDIUM" {
+		sql = fmt.Sprintf("ALTER PRIORITY GROUP [%s] SET WEIGHT = %d;\n", p.name, p.weight)
+	} else {
+		sql = fmt.Sprintf(
+			"DROP PRIORITY GROUP [%s];\n"+
+				"CREATE PRIORITY GROUP [%s] WITH WEIGHT = %d;\n",
+			p.name, p.name, p.weight,
+		)
+	}
 	if p.comment != "" {
 		sql += fmt.Sprintf(
 			"COMMENT ON PRIORITY GROUP [%s] IS '%s';\n",

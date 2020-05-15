@@ -77,7 +77,9 @@ func (s *testSuite) TearDownTest() {
 func (s *testSuite) execute(args ...string) {
 	for _, arg := range args {
 		_, err := s.exaConn.Execute(arg)
-		s.NoError(err, "Unable to execute SQL")
+		if !s.exaConn.Conf.SuppressError {
+			s.NoError(err, "Unable to execute SQL")
+		}
 	}
 }
 
@@ -484,16 +486,23 @@ func (s *testSuite) TestConnections() {
 }
 
 func (s *testSuite) TestPriorityGroups() {
-	existingGroups := "CREATE PRIORITY GROUP [HIGH] WITH WEIGHT = 900;\n" +
-		"CREATE PRIORITY GROUP [LOW] WITH WEIGHT = 100;\n" +
-		"CREATE PRIORITY GROUP [MEDIUM] WITH WEIGHT = 300;\n"
-	groupSQL := "CREATE PRIORITY GROUP [custom] WITH WEIGHT = 123;\n"
-	commentSQL := "COMMENT ON PRIORITY GROUP [custom] IS 'the big cheeses';\n"
-	s.execute(groupSQL, commentSQL)
+	groupSQL := []string{
+		"DROP PRIORITY GROUP [Low]",
+		"CREATE PRIORITY GROUP [Low] WITH WEIGHT = 234",
+		"ALTER PRIORITY GROUP [MEDIUM] SET WEIGHT = 345",
+		"DROP PRIORITY GROUP [custom]",
+		"CREATE PRIORITY GROUP [custom] WITH WEIGHT = 456",
+		"COMMENT ON PRIORITY GROUP [custom] IS 'the big cheeses'",
+		"DROP PRIORITY GROUP [high]",
+		"CREATE PRIORITY GROUP [high] WITH WEIGHT = 123",
+	}
+	s.exaConn.Conf.SuppressError = true // The groups may not exist
+	s.execute("DROP PRIORITY GROUP HIGH")
+	s.execute("DROP PRIORITY GROUP LOW")
+	s.execute(groupSQL...)
+	s.exaConn.Conf.SuppressError = false
 	s.backup(Conf{}, PRIORITY_GROUPS)
-	s.expect(dt{
-		"priority_groups.sql": existingGroups + groupSQL + commentSQL,
-	})
+	s.expect(dt{"priority_groups.sql": strings.Join(groupSQL, ";\n") + ";\n"})
 	s.execute("DROP PRIORITY GROUP [custom]")
 }
 
