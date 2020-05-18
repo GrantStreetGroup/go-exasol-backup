@@ -34,13 +34,15 @@ func BackupRoles(src *exasol.Conn, dst string, dropExtras bool) error {
 	}
 	os.MkdirAll(dir, os.ModePerm)
 
-	roleNames := []string{"PUBLIC"}
+	roleNames := []string{}
 	for _, role := range roles {
 		err = createRole(dir, role)
 		if err != nil {
 			return err
 		}
-		roleNames = append(roleNames, role.name)
+		if role.name != "DBA" {
+			roleNames = append(roleNames, role.name)
+		}
 	}
 
 	err = BackupPrivileges(src, dir, roleNames)

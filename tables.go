@@ -1,5 +1,3 @@
-// TODO add partition and distribution keys
-
 package backup
 
 import (
@@ -7,6 +5,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -15,13 +14,15 @@ import (
 )
 
 type table struct {
-	schema      string
-	name        string
-	rowCount    float64
-	columns     []*column
-	constraints []*constraint
-	data        chan []byte
-	comment     string
+	schema       string
+	name         string
+	rowCount     float64
+	columns      []*column
+	constraints  []*constraint
+	distribution []string
+	partition    []string
+	data         chan []byte
+	comment      string
 }
 
 type column struct {
@@ -33,9 +34,13 @@ type column struct {
 }
 
 type constraint struct {
-	columns []string
-	conType string
-	enabled bool
+	name       string
+	columns    []string
+	conType    string
+	refSchema  string
+	refTable   string
+	refColumns []string
+	enabled    bool
 }
 
 func (t *table) Schema() string { return t.schema }
@@ -145,12 +150,39 @@ func getTablesToBackup(conn *exasol.Conn, crit Criteria) ([]*table, []dbObj, err
 		SELECT table_schema AS s,
 			   table_name AS o,
 			   table_row_count,
-			   table_comment
+			   table_comment,
+			   distribution,
+			   partition
 		FROM exa_all_tables
+		LEFT JOIN (
+			SELECT column_schema AS s,
+				   column_table  AS o,
+				   GROUP_CONCAT(
+					   CASE WHEN column_is_distribution_key IS TRUE
+					   THEN column_name END
+					   ORDER BY column_ordinal_position
+					   SEPARATOR ','
+				   ) AS distribution,
+				   GROUP_CONCAT(
+					   CASE WHEN column_partition_key_ordinal_position IS NOT NULL
+					   THEN column_name END
+					   ORDER BY column_partition_key_ordinal_position
+					   SEPARATOR ','
+				   ) AS partition
+			FROM exa_all_columns
+			WHERE column_object_type = 'TABLE'
+			  AND column_is_virtual = FALSE
+			  AND (%s)
+			GROUP BY local.s, local.o
+		) AS dist_part
+		  ON dist_part.s = table_schema
+		 AND dist_part.o = table_name
 		WHERE table_is_virtual = FALSE
 		  AND (%s)
 		ORDER BY table_schema, table_name
-		`, crit.getSQLCriteria(),
+		`,
+		crit.getSQLCriteria(),
+		crit.getSQLCriteria(),
 	)
 	res, err := conn.FetchSlice(sql)
 	if err != nil {
@@ -168,6 +200,12 @@ func getTablesToBackup(conn *exasol.Conn, crit Criteria) ([]*table, []dbObj, err
 		}
 		if row[3] != nil {
 			t.comment = row[3].(string)
+		}
+		if row[4] != nil {
+			t.distribution = strings.Split(row[4].(string), ",")
+		}
+		if row[5] != nil {
+			t.partition = strings.Split(row[5].(string), ",")
 		}
 		tables = append(tables, t)
 		dbObjs = append(dbObjs, t)
@@ -231,9 +269,11 @@ func addTableConstraints(conn *exasol.Conn, tables []*table, crit Criteria) erro
 	sql := fmt.Sprintf(`
 		SELECT con.constraint_schema AS s,
 			   con.constraint_table  AS o,
+			   con.constraint_name,
 			   con.constraint_type,
 			   con.constraint_enabled,
-			   cols.columns
+			   cols.columns,
+			   refSchema, refTable, refColumns
 		FROM exa_all_constraints AS con
 		JOIN (
 			SELECT constraint_schema AS s,
@@ -243,14 +283,23 @@ func addTableConstraints(conn *exasol.Conn, tables []*table, crit Criteria) erro
 					   column_name
 					   ORDER BY ordinal_position
 					   SEPARATOR ','
-				   ) AS columns
+				   ) AS columns,
+				   FIRST_VALUE(referenced_schema) AS refSchema,
+				   FIRST_VALUE(referenced_table)  AS refTable,
+				   GROUP_CONCAT(
+					   referenced_column
+					   ORDER BY ordinal_position
+					   SEPARATOR ','
+				   ) AS refColumns
 		    FROM exa_all_constraint_columns
 			WHERE %s
 			GROUP BY local.s, local.o, constraint_name
-		) AS cols USING(constraint_name)
-		WHERE con.constraint_type IN ('PRIMARY KEY','NOT NULL')
-	      AND (%s)
-		ORDER BY local.s, local.o
+		) AS cols
+		  ON con.constraint_schema = cols.s
+		 AND con.constraint_table = cols.o
+		 AND con.constraint_name = cols.constraint_name
+		WHERE (%s)
+		ORDER BY local.s, local.o, con.constraint_name
 		`, crit.getSQLCriteria(), crit.getSQLCriteria(),
 	)
 	res, err := conn.FetchSlice(sql)
@@ -262,9 +311,17 @@ func addTableConstraints(conn *exasol.Conn, tables []*table, crit Criteria) erro
 		schemaName := row[0].(string)
 		tableName := row[1].(string)
 		con := &constraint{
-			conType: row[2].(string),
-			enabled: row[3].(bool),
-			columns: strings.Split(row[4].(string), ","),
+			conType: row[3].(string),
+			enabled: row[4].(bool),
+			columns: strings.Split(row[5].(string), ","),
+		}
+		if row[2] != nil {
+			con.name = row[2].(string)
+		}
+		if row[6] != nil {
+			con.refSchema = row[6].(string)
+			con.refTable = row[7].(string)
+			con.refColumns = strings.Split(row[8].(string), ",")
 		}
 
 		var table *table
@@ -305,6 +362,7 @@ func writeTables(dst string, in <-chan *table, crit Criteria, maxRows int, error
 }
 
 func createTable(dir string, t *table) error {
+	sysConstraint := regexp.MustCompile(`SYS_\d+`)
 	var cols []string
 	for _, c := range t.columns {
 		col := fmt.Sprintf(`"%s" %s`, c.name, c.colType)
@@ -314,13 +372,15 @@ func createTable(dir string, t *table) error {
 		if c.identity != "" {
 			col += fmt.Sprintf(" IDENTITY %s", c.identity)
 		}
+		// in-line constraints
 		for _, cnst := range t.constraints {
 			if cnst.conType == "NOT NULL" &&
 				cnst.columns[0] == c.name {
+				if cnst.name != "" && !sysConstraint.MatchString(cnst.name) {
+					col += fmt.Sprintf(` CONSTRAINT "%s"`, cnst.name)
+				}
 				col += " NOT NULL"
-				if cnst.enabled {
-					col += " ENABLE"
-				} else {
+				if !cnst.enabled {
 					col += " DISABLE"
 				}
 				break
@@ -332,28 +392,51 @@ func createTable(dir string, t *table) error {
 		cols = append(cols, col)
 	}
 
+	// out-of-line constraints
 	for _, cnst := range t.constraints {
-		if cnst.conType == "PRIMARY KEY" {
-			col := fmt.Sprintf(
-				`PRIMARY KEY ("%s")`,
-				strings.Join(cnst.columns, `","`),
-			)
-			if cnst.enabled {
-				col += " ENABLE"
-			} else {
-				col += " DISABLE"
-			}
-			cols = append(cols, col)
+		if cnst.conType == "NOT NULL" {
+			continue
 		}
+		col := ""
+		if cnst.name != "" && !sysConstraint.MatchString(cnst.name) {
+			col += fmt.Sprintf(`CONSTRAINT "%s" `, cnst.name)
+		}
+		col += fmt.Sprintf(
+			`%s ("%s")`,
+			cnst.conType, strings.Join(cnst.columns, `","`),
+		)
+		if cnst.conType == "FOREIGN KEY" {
+			col += fmt.Sprintf(
+				` REFERENCES "%s"."%s" ("%s")`,
+				cnst.refSchema, cnst.refTable,
+				strings.Join(cnst.refColumns, `","`),
+			)
+		}
+		if !cnst.enabled {
+			col += " DISABLE"
+		}
+		cols = append(cols, col)
+	}
+
+	if len(t.distribution) > 0 {
+		cols = append(cols,
+			fmt.Sprintf(`DISTRIBUTE BY "%s"`, strings.Join(t.distribution, `","`)),
+		)
+	}
+	if len(t.partition) > 0 {
+		cols = append(cols,
+			fmt.Sprintf(`PARTITION BY "%s"`, strings.Join(t.partition, `","`)),
+		)
 	}
 
 	sql := fmt.Sprintf(
-		"CREATE OR REPLACE TABLE \"%s\".\"%s\" (\n\t%s\n);\n",
+		"CREATE OR REPLACE TABLE \"%s\".\"%s\" (\n\t%s\n)",
 		t.schema, t.name, strings.Join(cols, ",\n\t"),
 	)
 	if t.comment != "" {
-		sql += fmt.Sprintf("COMMENT ON TABLE [%s] IS '%s';\n", t.name, qStr(t.comment))
+		sql += fmt.Sprintf(" COMMENT IS '%s'", qStr(t.comment))
 	}
+	sql += ";\n"
 	file := filepath.Join(dir, t.name+".sql")
 
 	err := ioutil.WriteFile(file, []byte(sql), 0644)

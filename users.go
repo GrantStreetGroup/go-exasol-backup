@@ -10,10 +10,13 @@ import (
 )
 
 type user struct {
-	name     string
-	ldapDN   string
-	priority string
-	comment  string
+	name       string
+	ldapDN     string
+	kerberos   string
+	priority   string
+	comment    string
+	passState  string
+	passPolicy string
 }
 
 func BackupUsers(src *exasol.Conn, dst string, dropExtras bool) error {
@@ -58,8 +61,11 @@ func getUsersToBackup(conn *exasol.Conn) ([]*user, error) {
 		SELECT user_name AS s,
 			   user_name AS o,
 			   distinguished_name,
+			   kerberos_principal,
 			   user_priority,
-			   user_comment
+			   user_comment,
+			   password_state,
+			   password_expiry_policy
 		FROM exa_dba_users
 		WHERE user_name != 'SYS'
 		ORDER BY local.s`,
@@ -76,10 +82,19 @@ func getUsersToBackup(conn *exasol.Conn) ([]*user, error) {
 			u.ldapDN = row[2].(string)
 		}
 		if row[3] != nil {
-			u.priority = row[3].(string)
+			u.kerberos = row[3].(string)
 		}
 		if row[4] != nil {
-			u.comment = row[4].(string)
+			u.priority = row[4].(string)
+		}
+		if row[5] != nil {
+			u.comment = row[5].(string)
+		}
+		if row[6] != nil {
+			u.passState = row[6].(string)
+		}
+		if row[7] != nil {
+			u.passPolicy = row[7].(string)
 		}
 		users = append(users, u)
 	}
@@ -90,8 +105,17 @@ func backupUser(dst string, u *user) error {
 	log.Noticef("Backing up user %s", u.name)
 
 	sql := ""
-	dn := u.ldapDN
-	if dn == "" {
+	if u.kerberos != "" {
+		sql = fmt.Sprintf(
+			"CREATE USER %s IDENTIFIED BY KERBEROS PRINCIPAL '%s';\n",
+			u.name, u.kerberos,
+		)
+	} else if u.ldapDN != "" {
+		sql = fmt.Sprintf(
+			"CREATE USER %s IDENTIFIED AT LDAP AS '%s';\n",
+			u.name, u.ldapDN,
+		)
+	} else {
 		// If the user is setup with a non-LDAP account
 		// we can't backup the password. If the user already
 		// exists on the destination site then the create-user
@@ -102,16 +126,19 @@ func backupUser(dst string, u *user) error {
 		// the meantime we set an invalid password by
 		// setting it to an invalid LDAP distinguished name.
 		sql = fmt.Sprintf("CREATE USER %s IDENTIFIED BY ********;\n", u.name)
-	} else {
-		sql = fmt.Sprintf("CREATE USER %s IDENTIFIED AT LDAP AS '%s';\n", u.name, dn)
 	}
 
 	if u.priority != "" {
-		sql += fmt.Sprintf("GRANT PRIORITY %s TO %s;\n", u.priority, u.name)
+		sql += fmt.Sprintf("GRANT PRIORITY GROUP [%s] TO %s;\n", u.priority, u.name)
 	}
-
 	if u.comment != "" {
 		sql += fmt.Sprintf("COMMENT ON USER %s IS '%s';\n", u.name, qStr(u.comment))
+	}
+	if u.passPolicy != "" {
+		sql += fmt.Sprintf("ALTER USER %s SET PASSWORD_EXPIRY_POLICY='%s';\n", u.name, u.passPolicy)
+	}
+	if u.passState != "" && u.passState != "VALID" {
+		sql += fmt.Sprintf("ALTER USER %s PASSWORD EXPIRE;\n", u.name)
 	}
 
 	file := filepath.Join(dst, u.name+".sql")

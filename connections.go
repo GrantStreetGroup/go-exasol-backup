@@ -46,15 +46,14 @@ func BackupConnections(src *exasol.Conn, dst string) error {
 }
 
 func getConnectionsToBackup(conn *exasol.Conn) ([]*connection, error) {
-	sql := fmt.Sprintf(`
-		SELECT connection_name AS s,
-			   connection_name AS o,
+	sql := `
+		SELECT connection_name,
 			   connection_string,
 			   user_name,
 			   connection_comment
 		FROM exa_dba_connections
-		ORDER BY local.s`,
-	)
+		ORDER BY connection_name
+	`
 	res, err := conn.FetchSlice(sql)
 	if err != nil {
 		return nil, fmt.Errorf("Unable to get connections to backup: %s", err)
@@ -63,13 +62,13 @@ func getConnectionsToBackup(conn *exasol.Conn) ([]*connection, error) {
 	for _, row := range res {
 		c := &connection{
 			name:    row[0].(string),
-			connStr: row[2].(string),
+			connStr: row[1].(string),
+		}
+		if row[2] != nil {
+			c.username = row[2].(string)
 		}
 		if row[3] != nil {
-			c.username = row[3].(string)
-		}
-		if row[4] != nil {
-			c.comment = row[4].(string)
+			c.comment = row[3].(string)
 		}
 		connections = append(connections, c)
 	}
@@ -79,12 +78,12 @@ func getConnectionsToBackup(conn *exasol.Conn) ([]*connection, error) {
 func createConnection(c *connection) string {
 	log.Noticef("Backing up connection %s", c.name)
 	sql := fmt.Sprintf(
-		"CREATE CONNECTION [%s] TO '%s' USER '%s' IDENTIFIED BY ********;\n",
+		"CREATE OR REPLACE CONNECTION %s TO '%s' USER '%s' IDENTIFIED BY ********;\n",
 		c.name, qStr(c.connStr), c.username,
 	)
 	if c.comment != "" {
 		sql += fmt.Sprintf(
-			"COMMENT ON CONNECTION [%s] IS '%s';\n",
+			"COMMENT ON CONNECTION %s IS '%s';\n",
 			c.name, qStr(c.comment),
 		)
 	}

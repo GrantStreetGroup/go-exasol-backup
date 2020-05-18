@@ -12,11 +12,10 @@ import (
 )
 
 type view struct {
-	schema  string
-	name    string
-	scope   string
-	text    string
-	comment string
+	schema string
+	name   string
+	scope  string
+	text   string
 }
 
 func (v *view) Schema() string { return v.schema }
@@ -70,12 +69,14 @@ func BackupViews(src *exasol.Conn, dst string, crit Criteria, maxRows int, dropE
 }
 
 func getViewsToBackup(conn *exasol.Conn, crit Criteria) ([]*view, []dbObj, error) {
+	// Not that view and view-column comments can only be added
+	// directly in the context of a CREATE VIEW so as long as we
+	// pull out view_text we got them all.
 	sql := fmt.Sprintf(`
 		SELECT view_schema AS s,
 			   view_name   AS o,
 			   scope_schema,
-			   view_text,
-			   view_comment
+			   view_text
 		FROM exa_all_views
 		WHERE %s
 		ORDER BY local.s, local.o
@@ -98,9 +99,6 @@ func getViewsToBackup(conn *exasol.Conn, crit Criteria) ([]*view, []dbObj, error
 		} else {
 			v.scope = row[2].(string)
 		}
-		if row[4] != nil {
-			v.comment = row[4].(string)
-		}
 		views = append(views, v)
 		dbObjs = append(dbObjs, v)
 	}
@@ -117,9 +115,6 @@ func backupView(dir string, v *view) error {
 	createView := r.ReplaceAllString(v.text, replacement)
 
 	sql := fmt.Sprintf("OPEN SCHEMA [%s];\n%s;\n", v.scope, createView)
-	if v.comment != "" {
-		sql += fmt.Sprintf("COMMENT ON VIEW [%s] IS '%s';\n", v.name, qStr(v.comment))
-	}
 	file := filepath.Join(dir, v.name+".sql")
 
 	err := ioutil.WriteFile(file, []byte(sql), 0644)
