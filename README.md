@@ -48,7 +48,3 @@ This is free software, licensed under:
 
     MIT License
 
-# Contributors
-
-- Peter Kioko <peter.kioko@grantstreet.com>
-
