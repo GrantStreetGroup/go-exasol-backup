@@ -21,11 +21,11 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
-var test_host = flag.String("host", "127.0.0.1", "Exasol hostname")
-var test_port = flag.Int("port", 8563, "Exasol port")
-var test_pass = flag.String("pass", "exasol", "Exasol SYS password")
-var test_loglevel = flag.String("loglevel", "warning", "Output loglevel")
-var test_tmpdir = flag.String("tmpdir", "/var/tmp/", "Temp directory for backup destination")
+var testHost = flag.String("host", "127.0.0.1", "Exasol hostname")
+var testPort = flag.Int("port", 8563, "Exasol port")
+var testPass = flag.String("pass", "exasol", "Exasol SYS password")
+var testLoglevel = flag.String("loglevel", "warning", "Output loglevel")
+var testTmpdir = flag.String("tmpdir", "/var/tmp/", "Temp directory for backup destination")
 
 type testSuite struct {
 	suite.Suite
@@ -38,13 +38,13 @@ type testSuite struct {
 
 func TestBackups(t *testing.T) {
 	s := new(testSuite)
-	s.tmpDir = *test_tmpdir
-	s.loglevel = *test_loglevel
+	s.tmpDir = *testTmpdir
+	s.loglevel = *testLoglevel
 	s.exaConn = exasol.Connect(exasol.ConnConf{
-		Host:     *test_host,
-		Port:     uint16(*test_port),
+		Host:     *testHost,
+		Port:     uint16(*testPort),
 		Username: "SYS",
-		Password: *test_pass,
+		Password: *testPass,
 		LogLevel: s.loglevel,
 		Timeout:  10,
 	})
