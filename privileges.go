@@ -40,6 +40,7 @@ func backupConnectionPrivs(src *exasol.Conn, dst string, grantees []string) erro
 		SELECT grantee, granted_connection, admin_option
 		FROM exa_dba_connection_privs
 		WHERE grantee IN (%s)
+		ORDER BY 1, 2
 		`, strings.Join(grantees, ","),
 	)
 	res, err := src.FetchSlice(sql)
@@ -71,6 +72,7 @@ func backupObjectPrivs(src *exasol.Conn, dst string, grantees []string) error {
 		       privilege, grantee
 		FROM exa_dba_obj_privs
 		WHERE grantee IN (%s)
+		ORDER BY 1, 2, 3, 4, 5
 		`, strings.Join(grantees, ","),
 	)
 	res, err := src.FetchSlice(sql)
@@ -107,6 +109,7 @@ func backupRestrictedObjectPrivs(src *exasol.Conn, dst string, grantees []string
 		       privilege, grantee
 		FROM exa_dba_restricted_obj_privs
 		WHERE grantee IN (%s)
+		ORDER BY 1, 2, 3, 4, 5, 6, 7, 8
 		`, strings.Join(grantees, ","),
 	)
 	res, err := src.FetchSlice(sql)
@@ -151,6 +154,7 @@ func backupRolePrivs(src *exasol.Conn, dst string, grantees []string) error {
 		SELECT grantee, granted_role, admin_option
 		FROM exa_dba_role_privs
 		WHERE grantee IN (%s)
+		ORDER BY 1, 2
 		`, strings.Join(grantees, ","),
 	)
 	res, err := src.FetchSlice(sql)
@@ -182,6 +186,7 @@ func backupSystemPrivs(src *exasol.Conn, dst string, grantees []string) error {
 		SELECT grantee, privilege, admin_option
 		FROM exa_dba_sys_privs
 		WHERE grantee IN (%s)
+		ORDER BY 1, 2
 		`, strings.Join(grantees, ","),
 	)
 	res, err := src.FetchSlice(sql)
@@ -213,6 +218,7 @@ func backupImpersonationPrivs(src *exasol.Conn, dst string, grantees []string) e
 		SELECT grantee, impersonation_on
 		FROM exa_dba_impersonation_privs
 		WHERE grantee IN (%s)
+		ORDER BY 1, 2
 		`, strings.Join(grantees, ","),
 	)
 	res, err := src.FetchSlice(sql)
@@ -242,6 +248,7 @@ func backupSchemaOwners(src *exasol.Conn, dst string, grantees []string) error {
         LEFT JOIN exa_all_virtual_schemas AS vs
           ON s.schema_name = vs.schema_name
         WHERE s.schema_owner IN (%s)
+		ORDER BY 1, 2
 		`, strings.Join(grantees, ","),
 	)
 	res, err := src.FetchSlice(sql)
