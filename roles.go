@@ -16,7 +16,7 @@ type role struct {
 }
 
 func BackupRoles(src *exasol.Conn, dst string, dropExtras bool) error {
-	log.Notice("Backing up roles")
+	log.Info("Backing up roles")
 
 	roles, err := getRolesToBackup(src)
 	if err != nil {
@@ -29,7 +29,7 @@ func BackupRoles(src *exasol.Conn, dst string, dropExtras bool) error {
 
 	dir := filepath.Join(dst, "roles")
 	if dropExtras {
-		log.Noticef("Remove extraneous backedup roles")
+		log.Infof("Remove extraneous backedup roles")
 		os.RemoveAll(dir)
 	}
 	os.MkdirAll(dir, os.ModePerm)
@@ -83,7 +83,7 @@ func getRolesToBackup(conn *exasol.Conn) ([]*role, error) {
 }
 
 func createRole(dst string, r *role) error {
-	log.Noticef("Backing up role %s", r.name)
+	log.Infof("Backing up role %s", r.name)
 
 	var sql string
 	if r.name != "DBA" && r.name != "PUBLIC" {

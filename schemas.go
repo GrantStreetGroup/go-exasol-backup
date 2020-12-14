@@ -30,7 +30,7 @@ func (s *schema) Schema() string { return s.name }
 func (s *schema) Name() string   { return "" }
 
 func BackupSchemas(src *exasol.Conn, dst string, crit Criteria, dropExtras bool) error {
-	log.Noticef("Backing up schemas")
+	log.Infof("Backing up schemas")
 
 	schemas, dbObjs, err := getSchemasToBackup(src, crit)
 	if err != nil {
@@ -59,7 +59,7 @@ func BackupSchemas(src *exasol.Conn, dst string, crit Criteria, dropExtras bool)
 		}
 	}
 
-	log.Notice("Done backing up schemas")
+	log.Info("Done backing up schemas")
 	return nil
 }
 
@@ -146,7 +146,7 @@ func addVirtualSchemaProps(conn *exasol.Conn, schemas []*schema, crit Criteria) 
 }
 
 func createSchema(dst string, s *schema) error {
-	log.Noticef("Backing up schema %s", s.name)
+	log.Infof("Backing up schema %s", s.name)
 	sql := ""
 	if s.isVirtual {
 		props := ""

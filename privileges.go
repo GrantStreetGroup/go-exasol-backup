@@ -34,7 +34,7 @@ func BackupPrivileges(src *exasol.Conn, dst string, grantees []string) error {
 }
 
 func backupConnectionPrivs(src *exasol.Conn, dst string, grantees []string) error {
-	log.Notice("Backing up connection privileges")
+	log.Info("Backing up connection privileges")
 
 	sql := fmt.Sprintf(`
 		SELECT grantee, granted_connection, admin_option
@@ -65,7 +65,7 @@ func backupConnectionPrivs(src *exasol.Conn, dst string, grantees []string) erro
 }
 
 func backupObjectPrivs(src *exasol.Conn, dst string, grantees []string) error {
-	log.Notice("Backing up object privileges")
+	log.Info("Backing up object privileges")
 
 	sql := fmt.Sprintf(`
 		SELECT object_schema, object_name, object_type,
@@ -101,7 +101,7 @@ func backupObjectPrivs(src *exasol.Conn, dst string, grantees []string) error {
 }
 
 func backupRestrictedObjectPrivs(src *exasol.Conn, dst string, grantees []string) error {
-	log.Notice("Backing up restricted object privileges")
+	log.Info("Backing up restricted object privileges")
 
 	sql := fmt.Sprintf(`
 		SELECT object_schema, object_name, object_type,
@@ -148,7 +148,7 @@ func backupRestrictedObjectPrivs(src *exasol.Conn, dst string, grantees []string
 }
 
 func backupRolePrivs(src *exasol.Conn, dst string, grantees []string) error {
-	log.Notice("Backing up role privileges")
+	log.Info("Backing up role privileges")
 
 	sql := fmt.Sprintf(`
 		SELECT grantee, granted_role, admin_option
@@ -180,7 +180,7 @@ func backupRolePrivs(src *exasol.Conn, dst string, grantees []string) error {
 }
 
 func backupSystemPrivs(src *exasol.Conn, dst string, grantees []string) error {
-	log.Notice("Backing up system privileges")
+	log.Info("Backing up system privileges")
 
 	sql := fmt.Sprintf(`
 		SELECT grantee, privilege, admin_option
@@ -212,7 +212,7 @@ func backupSystemPrivs(src *exasol.Conn, dst string, grantees []string) error {
 }
 
 func backupImpersonationPrivs(src *exasol.Conn, dst string, grantees []string) error {
-	log.Notice("Backing up impersonation privileges")
+	log.Info("Backing up impersonation privileges")
 
 	sql := fmt.Sprintf(`
 		SELECT grantee, impersonation_on
@@ -239,7 +239,7 @@ func backupImpersonationPrivs(src *exasol.Conn, dst string, grantees []string) e
 }
 
 func backupSchemaOwners(src *exasol.Conn, dst string, grantees []string) error {
-	log.Notice("Backing up schema owners")
+	log.Info("Backing up schema owners")
 
 	sql := fmt.Sprintf(`
 	    SELECT DISTINCT s.schema_name, s.schema_owner,

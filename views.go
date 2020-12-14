@@ -22,7 +22,7 @@ func (v *view) Schema() string { return v.schema }
 func (v *view) Name() string   { return v.name }
 
 func BackupViews(src *exasol.Conn, dst string, crit Criteria, maxRows int, dropExtras bool) error {
-	log.Notice("Backing up views")
+	log.Info("Backing up views")
 
 	views, dbObjs, err := getViewsToBackup(src, crit)
 	if err != nil {
@@ -48,7 +48,7 @@ func BackupViews(src *exasol.Conn, dst string, crit Criteria, maxRows int, dropE
 			return err
 		}
 		if shouldBackup {
-			log.Noticef("Backing up view data for %s.%s", v.schema, v.name)
+			log.Infof("Backing up view data for %s.%s", v.schema, v.name)
 			wg := &sync.WaitGroup{}
 			wg.Add(2)
 			data := make(chan []byte)
@@ -106,7 +106,7 @@ func getViewsToBackup(conn *exasol.Conn, crit Criteria) ([]*view, []dbObj, error
 }
 
 func backupView(dir string, v *view) error {
-	log.Noticef("Backing up view %s.%s", v.schema, v.name)
+	log.Infof("Backing up view %s.%s", v.schema, v.name)
 
 	// We have to swap out the name too because if the view got renamed
 	// the v.text still references the original name.
@@ -147,10 +147,13 @@ func readViewData(conn *exasol.Conn, v *view, data chan<- []byte, errors chan<- 
 		"EXPORT (SELECT * FROM [%s].[%s]) INTO CSV AT '%%s' FILE 'data.csv'",
 		v.schema, v.name,
 	)
-	_, err := conn.StreamQuery(exportSQL, data)
-	if err != nil {
-		errors <- fmt.Errorf("Unable to read view %s: %s", v.name, err)
+	res := conn.StreamQuery(exportSQL)
+	if res.Error != nil {
+		errors <- fmt.Errorf("Unable to read view %s: %s", v.name, res.Error)
 		return
+	}
+	for d := range res.Data {
+		data <- d
 	}
 }
 

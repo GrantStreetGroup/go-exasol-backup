@@ -19,7 +19,7 @@ type connection struct {
 }
 
 func BackupConnections(src *exasol.Conn, dst string) error {
-	log.Notice("Backing up connections")
+	log.Info("Backing up connections")
 
 	connections, err := getConnectionsToBackup(src)
 	if err != nil {
@@ -76,7 +76,7 @@ func getConnectionsToBackup(conn *exasol.Conn) ([]*connection, error) {
 }
 
 func createConnection(c *connection) string {
-	log.Noticef("Backing up connection %s", c.name)
+	log.Infof("Backing up connection %s", c.name)
 	sql := fmt.Sprintf(
 		"CREATE OR REPLACE CONNECTION %s TO '%s' USER '%s' IDENTIFIED BY ********;\n",
 		c.name, qStr(c.connStr), c.username,

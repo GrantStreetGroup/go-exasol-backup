@@ -14,10 +14,8 @@ import (
 	"strings"
 
 	"github.com/grantstreetgroup/go-exasol-client"
-	"github.com/op/go-logging"
+	"github.com/sirupsen/logrus"
 )
-
-var log = logging.MustGetLogger("exasol-backup")
 
 /* Public Interface */
 
@@ -79,7 +77,7 @@ func Backup(cfg Conf) error {
 	if err != nil {
 		return err
 	}
-	log.Noticef("Backing up to %s", cfg.Destination)
+	log.Infof("Backing up to %s", cfg.Destination)
 
 	// Set defaults
 	if cfg.Match == "" {
@@ -170,7 +168,7 @@ func Backup(cfg Conf) error {
 		}
 	}
 
-	log.Notice("Done backing up")
+	log.Info("Done backing up")
 	return nil
 }
 
@@ -186,23 +184,17 @@ type dbObj interface {
 	Schema() string
 }
 
+var log = logrus.New()
+
 func initLogging(logLevelStr string) error {
 	if logLevelStr == "" {
 		logLevelStr = "warning"
 	}
-	logLevel, err := logging.LogLevel(logLevelStr)
+	lvl, err := logrus.ParseLevel(logLevelStr)
 	if err != nil {
-		return fmt.Errorf("Unrecognized log level: %s", err)
+		return err
 	}
-	logFormat := logging.MustStringFormatter(
-		"%{color}%{time:15:04:05.000} %{shortfunc}: " +
-			"%{level:.4s} %{id:03x}%{color:reset} %{message}",
-	)
-	backend := logging.NewLogBackend(os.Stdout, "[exasol-backup]", 0)
-	formattedBackend := logging.NewBackendFormatter(backend, logFormat)
-	leveledBackend := logging.AddModuleLevel(formattedBackend)
-	leveledBackend.SetLevel(logLevel, "exasol-backup")
-	log.SetBackend(leveledBackend)
+	log.SetLevel(lvl)
 
 	return nil
 }
@@ -267,7 +259,7 @@ func buildCriteria(argStr string) string {
 }
 
 func removeExtraObjects(objType string, srcObjs []dbObj, dst string, crit Criteria) {
-	log.Noticef("Removing extraneous %s", objType)
+	log.Infof("Removing extraneous %s", objType)
 
 	schemaDir := filepath.Join(dst, "schemas")
 	os.MkdirAll(schemaDir, os.ModePerm) // May be the first time we're backing up the env
@@ -312,7 +304,7 @@ SCHEMA:
 								continue OBJ
 							}
 						}
-						log.Noticef("Dropping %s.%s %s", dstSchema.Name(), objBaseName, objType)
+						log.Infof("Dropping %s.%s %s", dstSchema.Name(), objBaseName, objType)
 						os.Remove(filepath.Join(objDir, obj.Name()))
 					}
 				}

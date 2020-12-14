@@ -47,7 +47,7 @@ func (t *table) Schema() string { return t.schema }
 func (t *table) Name() string   { return t.name }
 
 func BackupTables(src *exasol.Conn, dst string, crit Criteria, maxRows int, dropExtras bool) error {
-	log.Notice("Backing up tables")
+	log.Info("Backing up tables")
 	wg := &sync.WaitGroup{}
 	wg.Add(2)
 
@@ -106,7 +106,7 @@ func readTables(conn *exasol.Conn, out chan<- *table, crit Criteria, maxRows int
 }
 
 func readTable(conn *exasol.Conn, t *table, out chan<- *table, maxRows int) error {
-	log.Noticef("Backing up %s.%s", t.schema, t.name)
+	log.Infof("Backing up %s.%s", t.schema, t.name)
 	if t.rowCount == 0 || t.rowCount > float64(maxRows) {
 		out <- t
 		return nil
@@ -131,14 +131,17 @@ func readTable(conn *exasol.Conn, t *table, out chan<- *table, maxRows int) erro
 	)
 
 	start := time.Now()
-	bytesRead, err := conn.StreamQuery(exportSQL, t.data)
-	if err != nil {
-		return fmt.Errorf("Unable to read table %s.%s: %s", t.schema, t.name, err)
+	res := conn.StreamQuery(exportSQL)
+	if res.Error != nil {
+		return fmt.Errorf("Unable to read table %s.%s: %s", t.schema, t.name, res.Error)
+	}
+	for d := range res.Data {
+		t.data <- d
 	}
 	close(t.data)
 	duration := time.Since(start).Seconds()
 
-	totalMB := float64(bytesRead) / 1048576
+	totalMB := float64(res.BytesRead) / 1048576
 	mbps := totalMB / duration
 	rps := t.rowCount / duration
 	log.Infof("Read %0.fMB in %0.fs @ %0.fMBps and %0.frps", totalMB, duration, mbps, rps)
