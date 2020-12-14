@@ -147,10 +147,13 @@ func readViewData(conn *exasol.Conn, v *view, data chan<- []byte, errors chan<- 
 		"EXPORT (SELECT * FROM [%s].[%s]) INTO CSV AT '%%s' FILE 'data.csv'",
 		v.schema, v.name,
 	)
-	_, err := conn.StreamQuery(exportSQL, data)
-	if err != nil {
-		errors <- fmt.Errorf("Unable to read view %s: %s", v.name, err)
+	res := conn.StreamQuery(exportSQL)
+	if res.Error != nil {
+		errors <- fmt.Errorf("Unable to read view %s: %s", v.name, res.Error)
 		return
+	}
+	for d := range res.Data {
+		data <- d
 	}
 }
 

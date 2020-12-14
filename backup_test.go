@@ -37,17 +37,20 @@ type testSuite struct {
 }
 
 func TestBackups(t *testing.T) {
+	var err error
 	s := new(testSuite)
 	s.tmpDir = *testTmpdir
 	s.loglevel = *testLoglevel
-	s.exaConn = exasol.Connect(exasol.ConnConf{
+	s.exaConn, err = exasol.Connect(exasol.ConnConf{
 		Host:     *testHost,
 		Port:     uint16(*testPort),
 		Username: "SYS",
 		Password: *testPass,
-		LogLevel: s.loglevel,
 		Timeout:  10,
 	})
+	if err != nil {
+		log.Fatal("Unable to connect to Exasol: %s", err)
+	}
 	s.exaConn.DisableAutoCommit()
 	defer s.exaConn.Disconnect()
 

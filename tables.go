@@ -131,14 +131,17 @@ func readTable(conn *exasol.Conn, t *table, out chan<- *table, maxRows int) erro
 	)
 
 	start := time.Now()
-	bytesRead, err := conn.StreamQuery(exportSQL, t.data)
-	if err != nil {
-		return fmt.Errorf("Unable to read table %s.%s: %s", t.schema, t.name, err)
+	res := conn.StreamQuery(exportSQL)
+	if res.Error != nil {
+		return fmt.Errorf("Unable to read table %s.%s: %s", t.schema, t.name, res.Error)
+	}
+	for d := range res.Data {
+		t.data <- d
 	}
 	close(t.data)
 	duration := time.Since(start).Seconds()
 
-	totalMB := float64(bytesRead) / 1048576
+	totalMB := float64(res.BytesRead) / 1048576
 	mbps := totalMB / duration
 	rps := t.rowCount / duration
 	log.Infof("Read %0.fMB in %0.fs @ %0.fMBps and %0.frps", totalMB, duration, mbps, rps)
