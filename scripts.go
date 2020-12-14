@@ -21,7 +21,7 @@ func (s *script) Schema() string { return s.schema }
 func (s *script) Name() string   { return s.name }
 
 func BackupScripts(src *exasol.Conn, dst string, crit Criteria, dropExtras bool) error {
-	log.Notice("Backing up scripts")
+	log.Info("Backing up scripts")
 
 	scripts, dbObjs, err := getScriptsToBackup(src, crit)
 	if err != nil {
@@ -81,7 +81,7 @@ func getScriptsToBackup(conn *exasol.Conn, crit Criteria) ([]*script, []dbObj, e
 }
 
 func backupScript(dst string, s *script) error {
-	log.Noticef("Backing up script %s.%s", s.schema, s.name)
+	log.Infof("Backing up script %s.%s", s.schema, s.name)
 	sText := regexp.MustCompile(`^CREATE `).
 		ReplaceAllString(s.text, "CREATE OR REPLACE ")
 	sql := fmt.Sprintf("OPEN SCHEMA [%s];\n--/\n%s\n/\n", s.schema, sText)

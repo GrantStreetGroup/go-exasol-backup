@@ -20,7 +20,7 @@ type user struct {
 }
 
 func BackupUsers(src *exasol.Conn, dst string, dropExtras bool) error {
-	log.Notice("Backing up users")
+	log.Info("Backing up users")
 
 	users, err := getUsersToBackup(src)
 	if err != nil {
@@ -33,7 +33,7 @@ func BackupUsers(src *exasol.Conn, dst string, dropExtras bool) error {
 
 	dir := filepath.Join(dst, "users")
 	if dropExtras {
-		log.Noticef("Removing extraneous backedup users")
+		log.Infof("Removing extraneous backedup users")
 		os.RemoveAll(dir)
 	}
 	os.MkdirAll(dir, os.ModePerm)
@@ -102,7 +102,7 @@ func getUsersToBackup(conn *exasol.Conn) ([]*user, error) {
 }
 
 func backupUser(dst string, u *user) error {
-	log.Noticef("Backing up user %s", u.name)
+	log.Infof("Backing up user %s", u.name)
 
 	sql := ""
 	if u.kerberos != "" {

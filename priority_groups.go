@@ -18,7 +18,7 @@ type priorityGroup struct {
 }
 
 func BackupPriorityGroups(src *exasol.Conn, dst string) error {
-	log.Notice("Backing up priority groups")
+	log.Info("Backing up priority groups")
 
 	priorityGroups, err := getPriorityGroupsToBackup(src)
 	if err != nil {
@@ -72,7 +72,7 @@ func getPriorityGroupsToBackup(conn *exasol.Conn) ([]*priorityGroup, error) {
 }
 
 func createPriorityGroup(p *priorityGroup) string {
-	log.Noticef("Backing up priority group %s", p.name)
+	log.Infof("Backing up priority group %s", p.name)
 	sql := ""
 	if p.name == "MEDIUM" {
 		sql = fmt.Sprintf("ALTER PRIORITY GROUP [%s] SET WEIGHT = %d;\n", p.name, p.weight)

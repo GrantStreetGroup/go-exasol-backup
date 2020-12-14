@@ -21,7 +21,7 @@ func (f *function) Schema() string { return f.schema }
 func (f *function) Name() string   { return f.name }
 
 func BackupFunctions(src *exasol.Conn, dst string, crit Criteria, dropExtras bool) error {
-	log.Notice("Backing up functions")
+	log.Info("Backing up functions")
 
 	allFuncs, dbObjs, err := getFunctionsToBackup(src, crit)
 	if err != nil {
@@ -81,7 +81,7 @@ func getFunctionsToBackup(conn *exasol.Conn, crit Criteria) ([]*function, []dbOb
 }
 
 func createFunction(dst string, f *function) error {
-	log.Noticef("Backing up function %s.%s", f.schema, f.name)
+	log.Infof("Backing up function %s.%s", f.schema, f.name)
 	fText := regexp.MustCompile(`(?m)/\s*$`).ReplaceAllString(f.text, "")
 	sql := fmt.Sprintf(
 		"OPEN SCHEMA [%s];\n--/\nCREATE OR REPLACE %s\n/\n",

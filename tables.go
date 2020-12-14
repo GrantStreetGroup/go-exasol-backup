@@ -47,7 +47,7 @@ func (t *table) Schema() string { return t.schema }
 func (t *table) Name() string   { return t.name }
 
 func BackupTables(src *exasol.Conn, dst string, crit Criteria, maxRows int, dropExtras bool) error {
-	log.Notice("Backing up tables")
+	log.Info("Backing up tables")
 	wg := &sync.WaitGroup{}
 	wg.Add(2)
 
@@ -106,7 +106,7 @@ func readTables(conn *exasol.Conn, out chan<- *table, crit Criteria, maxRows int
 }
 
 func readTable(conn *exasol.Conn, t *table, out chan<- *table, maxRows int) error {
-	log.Noticef("Backing up %s.%s", t.schema, t.name)
+	log.Infof("Backing up %s.%s", t.schema, t.name)
 	if t.rowCount == 0 || t.rowCount > float64(maxRows) {
 		out <- t
 		return nil
