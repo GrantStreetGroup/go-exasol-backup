@@ -10,9 +10,9 @@ import (
 )
 
 type role struct {
-	name     string
-	priority string
-	comment  string
+	name           string
+	consumer_group string
+	comment        string
 }
 
 func BackupRoles(src *exasol.Conn, dst string, dropExtras bool) error {
@@ -55,13 +55,18 @@ func BackupRoles(src *exasol.Conn, dst string, dropExtras bool) error {
 }
 
 func getRolesToBackup(conn *exasol.Conn) ([]*role, error) {
+	groupType := "role_priority"
+	if capability.consumerGroups {
+		groupType = "role_consumer_group"
+	}
 	sql := fmt.Sprintf(`
 		SELECT role_name AS s,
 			   role_name AS o,
-			   role_priority,
+			   %s,
 			   role_comment
 		FROM exa_all_roles
 		ORDER BY local.s`,
+		groupType,
 	)
 	res, err := conn.FetchSlice(sql)
 	if err != nil {
@@ -72,7 +77,7 @@ func getRolesToBackup(conn *exasol.Conn) ([]*role, error) {
 		r := &role{name: row[0].(string)}
 
 		if row[2] != nil {
-			r.priority = row[2].(string)
+			r.consumer_group = row[2].(string)
 		}
 		if row[3] != nil {
 			r.comment = row[3].(string)
@@ -89,8 +94,12 @@ func createRole(dst string, r *role) error {
 	if r.name != "DBA" && r.name != "PUBLIC" {
 		sql = "CREATE ROLE " + r.name + ";\n"
 	}
-	if r.priority != "" {
-		sql += fmt.Sprintf("GRANT PRIORITY %s TO %s;\n", r.priority, r.name)
+	if r.consumer_group != "" {
+		if capability.consumerGroups {
+			sql += fmt.Sprintf("ALTER ROLE %s SET CONSUMER_GROUP = [%s];\n", r.name, r.consumer_group)
+		} else {
+			sql += fmt.Sprintf("GRANT PRIORITY GROUP [%s] TO %s;\n", r.consumer_group, r.name)
+		}
 	}
 	if r.comment != "" {
 		sql += fmt.Sprintf("COMMENT ON ROLE %s IS '%s';\n", r.name, qStr(r.comment))

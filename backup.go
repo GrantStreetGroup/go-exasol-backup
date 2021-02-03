@@ -26,7 +26,8 @@ const (
 	CONNECTIONS
 	FUNCTIONS
 	PARAMETERS
-	PRIORITY_GROUPS
+	PRIORITY_GROUPS // Pre-Exasol 7.0
+	CONSUMER_GROUPS // Exasol 7.0+
 	ROLES
 	SCHEMAS // This would backup the (virtual)schema itself but nothing under it
 	SCRIPTS
@@ -106,6 +107,7 @@ func Backup(cfg Conf) error {
 	// TODO capture and restore original values of these 2 settings
 	src.DisableAutoCommit()
 	src.Execute("ALTER SESSION SET NLS_TIMESTAMP_FORMAT='YYYY-MM-DD HH24:MI:SS.FF3'")
+	setCapabilities(src)
 
 	if backup[PARAMETERS] || backup[ALL] {
 		err := BackupParameters(src, dst)
@@ -113,8 +115,12 @@ func Backup(cfg Conf) error {
 			return err
 		}
 	}
-	if backup[PRIORITY_GROUPS] || backup[ALL] {
-		err := BackupPriorityGroups(src, dst)
+	if backup[PRIORITY_GROUPS] || backup[CONSUMER_GROUPS] || backup[ALL] {
+		if capability.consumerGroups {
+			err = BackupConsumerGroups(src, dst)
+		} else {
+			err = BackupPriorityGroups(src, dst)
+		}
 		if err != nil {
 			return err
 		}
@@ -184,7 +190,13 @@ type dbObj interface {
 	Schema() string
 }
 
+type capabilities struct {
+	consumerGroups bool
+}
+
 var log = logrus.New()
+
+var capability capabilities
 
 func initLogging(logLevelStr string) error {
 	if logLevelStr == "" {
@@ -315,4 +327,14 @@ SCHEMA:
 
 func qStr(str string) string {
 	return exasol.QuoteStr(str)
+}
+
+func setCapabilities(conn *exasol.Conn) {
+	capability = capabilities{}
+	res, _ := conn.FetchSlice(`
+		SELECT COUNT(*) > 0
+		FROM exa_syscat
+		WHERE object_name = 'EXA_CONSUMER_GROUPS'
+	`)
+	capability.consumerGroups = res[0][0].(bool)
 }

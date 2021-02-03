@@ -4,6 +4,8 @@
 
 	We recommend using an Exasol docker container for this:
 		https://github.com/exasol/docker-db
+
+	These tests expect Exasol v7.0+
 */
 package backup
 
@@ -55,6 +57,7 @@ func TestBackups(t *testing.T) {
 	}
 	s.exaConn.DisableAutoCommit()
 	defer s.exaConn.Disconnect()
+	setCapabilities(s.exaConn)
 
 	suite.Run(t, s)
 }
@@ -150,8 +153,9 @@ func (s *testSuite) TestParameters() {
 	s.expect(dt{
 		"parameters.sql": `
             ALTER SYSTEM SET CONSTRAINT_STATE_DEFAULT='ENABLE';
+            ALTER SYSTEM SET DEFAULT_CONSUMER_GROUP='MEDIUM';
             ALTER SYSTEM SET DEFAULT_LIKE_ESCAPE_CHARACTER='\';
-            ALTER SYSTEM SET DEFAULT_PRIORITY_GROUP='MEDIUM';
+            ALTER SYSTEM SET HASHTYPE_FORMAT='HEX';
             ALTER SYSTEM SET NLS_DATE_FORMAT='YYYY-MM-DD';
             ALTER SYSTEM SET NLS_DATE_LANGUAGE='ENG';
             ALTER SYSTEM SET NLS_FIRST_DAY_OF_WEEK=7;
@@ -164,10 +168,14 @@ func (s *testSuite) TestParameters() {
             ALTER SYSTEM SET QUERY_TIMEOUT='0';
             ALTER SYSTEM SET SCRIPT_LANGUAGES='PYTHON=builtin_python R=builtin_r JAVA=builtin_java PYTHON3=builtin_python3';
             ALTER SYSTEM SET SCRIPT_OUTPUT_ADDRESS='';
+			ALTER SYSTEM SET SESSION_TEMP_DB_RAM_LIMIT='OFF';
             ALTER SYSTEM SET SQL_PREPROCESSOR_SCRIPT='';
+			ALTER SYSTEM SET ST_MAX_DECIMAL_DIGITS='16';
+			ALTER SYSTEM SET TEMP_DB_RAM_LIMIT='OFF';
             ALTER SYSTEM SET TIMESTAMP_ARITHMETIC_BEHAVIOR='INTERVAL';
             ALTER SYSTEM SET TIME_ZONE='EUROPE/BERLIN';
             ALTER SYSTEM SET TIME_ZONE_BEHAVIOR='INVALID SHIFT AMBIGUOUS ST';
+			ALTER SYSTEM SET USER_TEMP_DB_RAM_LIMIT='OFF';
         `,
 	})
 }
@@ -462,16 +470,17 @@ func (s *testSuite) TestUsers() {
 
 func (s *testSuite) TestRoles() {
 	roleSQL := "CREATE ROLE LUMBERJACKS;\n"
+	groupSQL := "ALTER ROLE LUMBERJACKS SET CONSUMER_GROUP = [LOW];\n"
 	commentSQL := "COMMENT ON ROLE LUMBERJACKS IS 'tough guys';\n"
 
 	s.execute("DROP ROLE IF EXISTS lumberjacks")
-	s.execute(roleSQL, commentSQL)
+	s.execute(roleSQL, groupSQL, commentSQL)
 	s.backup(Conf{}, ROLES)
 	s.expect(dt{
 		"roles": dt{
 			"DBA.sql":         "COMMENT ON ROLE DBA IS 'DBA stands for database administrator and has all possible privileges. This role should only be assigned to very few users because it provides these with full access to the database.';\n",
-			"PUBLIC.sql":      "COMMENT ON ROLE PUBLIC IS 'The PUBLIC role stands apart because every user receives this role automatically. This makes it very simple to grant and later withdraw certain privileges to/from all users of the database. However, this should only occur if one is quite sure that it is safe to grant the respective rights and the shared data should be publicly accessible.';\n",
-			"LUMBERJACKS.sql": roleSQL + commentSQL,
+			"PUBLIC.sql":      "COMMENT ON ROLE PUBLIC IS 'The PUBLIC role stands apart because every user receives this role automatically. This makes it very simple to grant and later withdraw certain privileges to/from all users of the database. However, this should only occur if one is quite sure that it is safe to grant the respective rights and the shared data should be publicly accessible.';\nGRANT USE ANY SCHEMA TO PUBLIC;\n",
+			"LUMBERJACKS.sql": roleSQL + groupSQL + commentSQL,
 		},
 	})
 }
@@ -490,31 +499,83 @@ func (s *testSuite) TestConnections() {
 	})
 }
 
-func (s *testSuite) TestPriorityGroups() {
-	groupSQL := []string{
-		"DROP PRIORITY GROUP [Low]",
-		"CREATE PRIORITY GROUP [Low] WITH WEIGHT = 234",
-		"ALTER PRIORITY GROUP [MEDIUM] SET WEIGHT = 345",
-		"DROP PRIORITY GROUP [custom]",
-		"CREATE PRIORITY GROUP [custom] WITH WEIGHT = 456",
-		"COMMENT ON PRIORITY GROUP [custom] IS 'the big cheeses'",
-		"DROP PRIORITY GROUP [high]",
-		"CREATE PRIORITY GROUP [high] WITH WEIGHT = 123",
+func (s *testSuite) TestConsumerGroups() {
+	if capability.consumerGroups {
+		groupSQL := []string{
+			"DROP CONSUMER GROUP [Low]",
+			"CREATE CONSUMER GROUP [Low] WITH\n" +
+				"   PRECEDENCE = 1,\n" +
+				"   CPU_WEIGHT = 234,\n" +
+				"   GROUP_TEMP_DB_RAM_LIMIT = 'OFF',\n" +
+				"   USER_TEMP_DB_RAM_LIMIT = 'OFF',\n" +
+				"   SESSION_TEMP_DB_RAM_LIMIT = 'OFF'",
+			"ALTER CONSUMER GROUP [MEDIUM] SET\n" +
+				"   PRECEDENCE = 1,\n" +
+				"   CPU_WEIGHT = 456,\n" +
+				"   GROUP_TEMP_DB_RAM_LIMIT = '500',\n" +
+				"   USER_TEMP_DB_RAM_LIMIT = '678',\n" +
+				"   SESSION_TEMP_DB_RAM_LIMIT = 'OFF'",
+			"ALTER CONSUMER GROUP [SYS_CONSUMER_GROUP] SET\n" +
+				"   PRECEDENCE = 1000,\n" +
+				"   CPU_WEIGHT = 1000,\n" +
+				"   GROUP_TEMP_DB_RAM_LIMIT = 'OFF',\n" +
+				"   USER_TEMP_DB_RAM_LIMIT = 'OFF',\n" +
+				"   SESSION_TEMP_DB_RAM_LIMIT = 'OFF'",
+			"DROP CONSUMER GROUP [custom]",
+			"CREATE CONSUMER GROUP [custom] WITH\n" +
+				"  PRECEDENCE = 123,\n" +
+				"  CPU_WEIGHT = 456,\n" +
+				"  GROUP_TEMP_DB_RAM_LIMIT = '1234',\n" +
+				"  USER_TEMP_DB_RAM_LIMIT = '2345',\n" +
+				"  SESSION_TEMP_DB_RAM_LIMIT = '3456'",
+			"COMMENT ON CONSUMER GROUP [custom] IS 'the big cheeses'",
+			"DROP CONSUMER GROUP [high]",
+			"CREATE CONSUMER GROUP [high] WITH\n" +
+				"   PRECEDENCE = 123,\n" +
+				"   CPU_WEIGHT = 456,\n" +
+				"   GROUP_TEMP_DB_RAM_LIMIT = 'OFF',\n" +
+				"   USER_TEMP_DB_RAM_LIMIT = 'OFF',\n" +
+				"   SESSION_TEMP_DB_RAM_LIMIT = 'OFF'",
+		}
+		s.execute("DROP CONSUMER GROUP HIGH")
+		s.execute("DROP CONSUMER GROUP LOW")
+		s.execute("CREATE CONSUMER GROUP [Low] WITH CPU_WEIGHT = 12")
+		s.execute("CREATE CONSUMER GROUP [high] WITH CPU_WEIGHT = 12")
+		s.execute("CREATE CONSUMER GROUP [custom] WITH CPU_WEIGHT = 12")
+		s.execute(groupSQL...)
+		s.backup(Conf{}, CONSUMER_GROUPS)
+		s.expect(dt{"consumer_groups.sql": strings.Join(groupSQL, ";\n") + ";\n"})
+		s.execute("DROP CONSUMER GROUP [custom]")
+	} else {
+		groupSQL := []string{
+			"DROP PRIORITY GROUP [Low]",
+			"CREATE PRIORITY GROUP [Low] WITH WEIGHT = 234",
+			"ALTER PRIORITY GROUP [MEDIUM] SET WEIGHT = 345",
+			"DROP PRIORITY GROUP [custom]",
+			"CREATE PRIORITY GROUP [custom] WITH WEIGHT = 456",
+			"COMMENT ON PRIORITY GROUP [custom] IS 'the big cheeses'",
+			"DROP PRIORITY GROUP [high]",
+			"CREATE PRIORITY GROUP [high] WITH WEIGHT = 123",
+		}
+		s.exaConn.Conf.SuppressError = true // The groups may not exist
+		s.execute("DROP PRIORITY GROUP HIGH")
+		s.execute("DROP PRIORITY GROUP LOW")
+		s.execute(groupSQL...)
+		s.exaConn.Conf.SuppressError = false
+		s.backup(Conf{}, PRIORITY_GROUPS)
+		s.expect(dt{"priority_groups.sql": strings.Join(groupSQL, ";\n") + ";\n"})
+		s.execute("DROP PRIORITY GROUP [custom]")
 	}
-	s.exaConn.Conf.SuppressError = true // The groups may not exist
-	s.execute("DROP PRIORITY GROUP HIGH")
-	s.execute("DROP PRIORITY GROUP LOW")
-	s.execute(groupSQL...)
-	s.exaConn.Conf.SuppressError = false
-	s.backup(Conf{}, PRIORITY_GROUPS)
-	s.expect(dt{"priority_groups.sql": strings.Join(groupSQL, ";\n") + ";\n"})
-	s.execute("DROP PRIORITY GROUP [custom]")
 }
 
 func (s *testSuite) TestPrivileges() {
+	prioritySQL := "GRANT PRIORITY GROUP [LOW] TO JOE"
+	if capability.consumerGroups {
+		prioritySQL = "ALTER USER JOE SET CONSUMER_GROUP = [LOW]"
+	}
 	sql := []string{
 		"CREATE USER JOE IDENTIFIED BY KERBEROS PRINCIPAL 'joe'",
-		"GRANT PRIORITY GROUP [LOW] TO JOE",                          // Priority Priv
+		prioritySQL, // Priority Priv
 		"GRANT CONNECTION CONN TO JOE WITH ADMIN OPTION",             // Connection Priv
 		"GRANT SELECT ON SCHEMA [test] TO JOE",                       // Object Priv
 		"GRANT ACCESS ON CONNECTION [CONN] FOR SCHEMA [test] TO JOE", // Connection Restricted Priv

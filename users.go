@@ -10,13 +10,13 @@ import (
 )
 
 type user struct {
-	name       string
-	ldapDN     string
-	kerberos   string
-	priority   string
-	comment    string
-	passState  string
-	passPolicy string
+	name          string
+	ldapDN        string
+	kerberos      string
+	consumerGroup string
+	comment       string
+	passState     string
+	passPolicy    string
 }
 
 func BackupUsers(src *exasol.Conn, dst string, dropExtras bool) error {
@@ -57,18 +57,23 @@ func BackupUsers(src *exasol.Conn, dst string, dropExtras bool) error {
 }
 
 func getUsersToBackup(conn *exasol.Conn) ([]*user, error) {
+	groupType := "user_priority"
+	if capability.consumerGroups {
+		groupType = "user_consumer_group"
+	}
 	sql := fmt.Sprintf(`
 		SELECT user_name AS s,
 			   user_name AS o,
 			   distinguished_name,
 			   kerberos_principal,
-			   user_priority,
+			   %s,
 			   user_comment,
 			   password_state,
 			   password_expiry_policy
 		FROM exa_dba_users
 		WHERE user_name != 'SYS'
 		ORDER BY local.s`,
+		groupType,
 	)
 	res, err := conn.FetchSlice(sql)
 	if err != nil {
@@ -85,7 +90,7 @@ func getUsersToBackup(conn *exasol.Conn) ([]*user, error) {
 			u.kerberos = row[3].(string)
 		}
 		if row[4] != nil {
-			u.priority = row[4].(string)
+			u.consumerGroup = row[4].(string)
 		}
 		if row[5] != nil {
 			u.comment = row[5].(string)
@@ -128,8 +133,12 @@ func backupUser(dst string, u *user) error {
 		sql = fmt.Sprintf("CREATE USER %s IDENTIFIED BY ********;\n", u.name)
 	}
 
-	if u.priority != "" {
-		sql += fmt.Sprintf("GRANT PRIORITY GROUP [%s] TO %s;\n", u.priority, u.name)
+	if u.consumerGroup != "" {
+		if capability.consumerGroups {
+			sql += fmt.Sprintf("ALTER USER %s SET CONSUMER_GROUP = [%s];\n", u.name, u.consumerGroup)
+		} else {
+			sql += fmt.Sprintf("GRANT PRIORITY GROUP [%s] TO %s;\n", u.consumerGroup, u.name)
+		}
 	}
 	if u.comment != "" {
 		sql += fmt.Sprintf("COMMENT ON USER %s IS '%s';\n", u.name, qStr(u.comment))
