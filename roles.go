@@ -10,9 +10,9 @@ import (
 )
 
 type role struct {
-	name           string
-	consumer_group string
-	comment        string
+	name          string
+	consumerGroup string
+	comment       string
 }
 
 func BackupRoles(src *exasol.Conn, dst string, dropExtras bool) error {
@@ -77,7 +77,7 @@ func getRolesToBackup(conn *exasol.Conn) ([]*role, error) {
 		r := &role{name: row[0].(string)}
 
 		if row[2] != nil {
-			r.consumer_group = row[2].(string)
+			r.consumerGroup = row[2].(string)
 		}
 		if row[3] != nil {
 			r.comment = row[3].(string)
@@ -94,11 +94,11 @@ func createRole(dst string, r *role) error {
 	if r.name != "DBA" && r.name != "PUBLIC" {
 		sql = "CREATE ROLE " + r.name + ";\n"
 	}
-	if r.consumer_group != "" {
+	if r.consumerGroup != "" {
 		if capability.consumerGroups {
-			sql += fmt.Sprintf("ALTER ROLE %s SET CONSUMER_GROUP = [%s];\n", r.name, r.consumer_group)
+			sql += fmt.Sprintf("ALTER ROLE %s SET CONSUMER_GROUP = [%s];\n", r.name, r.consumerGroup)
 		} else {
-			sql += fmt.Sprintf("GRANT PRIORITY GROUP [%s] TO %s;\n", r.consumer_group, r.name)
+			sql += fmt.Sprintf("GRANT PRIORITY GROUP [%s] TO %s;\n", r.consumerGroup, r.name)
 		}
 	}
 	if r.comment != "" {
