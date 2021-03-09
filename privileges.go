@@ -126,13 +126,13 @@ func backupRestrictedObjectPrivs(src *exasol.Conn, dst string, grantees []string
 		if row[0] == nil {
 			object = row[1].(string)
 		} else {
-			object = row[0].(string) + `"].["` + row[1].(string)
+			object = row[0].(string) + "].[" + row[1].(string)
 		}
 		var forObject string
 		if row[3] == nil {
 			forObject = row[4].(string)
 		} else {
-			forObject = row[3].(string) + `"].["` + row[4].(string)
+			forObject = row[3].(string) + "].[" + row[4].(string)
 		}
 
 		sql := fmt.Sprintf(
