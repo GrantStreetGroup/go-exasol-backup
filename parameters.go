@@ -71,8 +71,12 @@ func getParametersToBackup(conn *exasol.Conn) ([]*parameter, error) {
 func createParameter(p *parameter) string {
 	log.Infof("Backing up parameter %s", p.name)
 	q := "'"
-	if p.name == "NLS_FIRST_DAY_OF_WEEK" {
-		// This param is numeric so no quotes
+	if p.name == "NLS_FIRST_DAY_OF_WEEK" ||
+		p.name == "QUERY_TIMEOUT" ||
+		p.name == "SQL_PREPROCESSOR_SCRIPT" ||
+		p.name == "DEFAULT_PRIORITY_GROUP" ||
+		p.name == "DEFAULT_CONSUMER_GROUP" {
+		// These params don't need quotes
 		q = ""
 	}
 	return fmt.Sprintf("ALTER SYSTEM SET %s=%s%s%s;\n", p.name, q, p.value, q)
