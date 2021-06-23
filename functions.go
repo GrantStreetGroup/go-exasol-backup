@@ -82,7 +82,7 @@ func getFunctionsToBackup(conn *exasol.Conn, crit Criteria) ([]*function, []dbOb
 
 func createFunction(dst string, f *function) error {
 	log.Infof("Backing up function %s.%s", f.schema, f.name)
-	fText := regexp.MustCompile(`(?m)/\s*$`).ReplaceAllString(f.text, "")
+	fText := regexp.MustCompile(`(?s)/\s*$`).ReplaceAllString(f.text, "")
 	sql := fmt.Sprintf(
 		"OPEN SCHEMA [%s];\n--/\nCREATE OR REPLACE %s\n/\n",
 		f.schema, fText,
