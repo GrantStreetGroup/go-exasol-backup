@@ -15,8 +15,8 @@ func BackupPrivileges(src *exasol.Conn, dst string, grantees []string) error {
 	}
 	privs := []func(*exasol.Conn, string, []string) error{
 		backupConnectionPrivs,
-		backupObjectPrivs,
 		backupRestrictedObjectPrivs,
+		backupObjectPrivs,
 		backupRolePrivs,
 		backupSystemPrivs,
 		backupImpersonationPrivs,
