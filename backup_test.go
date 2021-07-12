@@ -361,6 +361,7 @@ func (s *testSuite) TestFunctions() {
 	openSchemaSQL := "OPEN SCHEMA [test];"
 	func1SQL := `--/
 	    CREATE OR REPLACE FUNCTION "test"."F1" ()
+		/* Test Comment */
 		RETURN DECIMAL res DECIMAL; BEGIN RETURN 1; END;
 		/
 	`
@@ -576,17 +577,24 @@ func (s *testSuite) TestPrivileges() {
 	sql := []string{
 		"CREATE USER JOE IDENTIFIED BY KERBEROS PRINCIPAL 'joe'",
 		prioritySQL, // Priority Priv
-		"GRANT CONNECTION CONN TO JOE WITH ADMIN OPTION",             // Connection Priv
-		"GRANT SELECT ON SCHEMA [test] TO JOE",                       // Object Priv
-		"GRANT ACCESS ON CONNECTION [CONN] FOR SCHEMA [test] TO JOE", // Connection Restricted Priv
-		"GRANT DBA TO JOE WITH ADMIN OPTION",                         // Role Priv
-		"GRANT SELECT ANY TABLE TO JOE WITH ADMIN OPTION",            // System Priv
-		"GRANT IMPERSONATION ON DBA TO JOE",                          // Impersonation Priv
-		"ALTER SCHEMA [test] CHANGE OWNER JOE",                       // Schema Owner
+		"GRANT CONNECTION CONN TO JOE WITH ADMIN OPTION",                   // Connection Priv
+		"GRANT SELECT ON SCHEMA [test] TO JOE",                             // Object Priv
+		"GRANT ACCESS ON CONNECTION [CONN] FOR SCRIPT [test].[SCR] TO JOE", // Connection Restricted Priv
+		"GRANT ACCESS ON CONNECTION [CONN] FOR SCHEMA [test] TO JOE",       // Connection Restricted Priv
+		"GRANT DBA TO JOE WITH ADMIN OPTION",                               // Role Priv
+		"GRANT SELECT ANY TABLE TO JOE WITH ADMIN OPTION",                  // System Priv
+		"GRANT IMPERSONATION ON DBA TO JOE",                                // Impersonation Priv
+		"ALTER SCHEMA [test] CHANGE OWNER JOE",                             // Schema Owner
 	}
 	s.execute("DROP USER IF EXISTS joe")
 	s.execute("DROP CONNECTION IF EXISTS conn")
 	s.execute("CREATE CONNECTION conn TO 'someplace'")
+	s.execute(`
+		CREATE OR REPLACE LUA SCALAR SCRIPT [test].[SCR]() RETURNS BOOLEAN AS
+			function run(ctx)
+				ctx.emit(true)
+			end
+	`)
 	s.execute(sql...)
 	s.backup(Conf{}, USERS)
 	s.expect(dt{
