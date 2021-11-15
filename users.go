@@ -112,12 +112,12 @@ func backupUser(dst string, u *user) error {
 	sql := ""
 	if u.kerberos != "" {
 		sql = fmt.Sprintf(
-			"CREATE USER %s IDENTIFIED BY KERBEROS PRINCIPAL '%s';\n",
+			"CREATE USER [%s] IDENTIFIED BY KERBEROS PRINCIPAL '%s';\n",
 			u.name, u.kerberos,
 		)
 	} else if u.ldapDN != "" {
 		sql = fmt.Sprintf(
-			"CREATE USER %s IDENTIFIED AT LDAP AS '%s';\n",
+			"CREATE USER [%s] IDENTIFIED AT LDAP AS '%s';\n",
 			u.name, u.ldapDN,
 		)
 	} else {
@@ -130,24 +130,24 @@ func backupUser(dst string, u *user) error {
 		// in manually later and change the password so in
 		// the meantime we set an invalid password by
 		// setting it to an invalid LDAP distinguished name.
-		sql = fmt.Sprintf("CREATE USER %s IDENTIFIED BY ********;\n", u.name)
+		sql = fmt.Sprintf("CREATE USER [%s] IDENTIFIED BY ********;\n", u.name)
 	}
 
 	if u.consumerGroup != "" {
 		if capability.consumerGroups {
-			sql += fmt.Sprintf("ALTER USER %s SET CONSUMER_GROUP = [%s];\n", u.name, u.consumerGroup)
+			sql += fmt.Sprintf("ALTER USER [%s] SET CONSUMER_GROUP = [%s];\n", u.name, u.consumerGroup)
 		} else {
-			sql += fmt.Sprintf("GRANT PRIORITY GROUP [%s] TO %s;\n", u.consumerGroup, u.name)
+			sql += fmt.Sprintf("GRANT PRIORITY GROUP [%s] TO [%s];\n", u.consumerGroup, u.name)
 		}
 	}
 	if u.comment != "" {
-		sql += fmt.Sprintf("COMMENT ON USER %s IS '%s';\n", u.name, qStr(u.comment))
+		sql += fmt.Sprintf("COMMENT ON USER [%s] IS '%s';\n", u.name, qStr(u.comment))
 	}
 	if u.passPolicy != "" {
-		sql += fmt.Sprintf("ALTER USER %s SET PASSWORD_EXPIRY_POLICY='%s';\n", u.name, u.passPolicy)
+		sql += fmt.Sprintf("ALTER USER [%s] SET PASSWORD_EXPIRY_POLICY='%s';\n", u.name, u.passPolicy)
 	}
 	if u.passState != "" && u.passState != "VALID" {
-		sql += fmt.Sprintf("ALTER USER %s PASSWORD EXPIRE;\n", u.name)
+		sql += fmt.Sprintf("ALTER USER [%s] PASSWORD EXPIRE;\n", u.name)
 	}
 
 	file := filepath.Join(dst, u.name+".sql")

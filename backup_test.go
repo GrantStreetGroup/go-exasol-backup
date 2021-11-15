@@ -156,6 +156,7 @@ func (s *testSuite) TestParameters() {
             ALTER SYSTEM SET DEFAULT_CONSUMER_GROUP=MEDIUM;
             ALTER SYSTEM SET DEFAULT_LIKE_ESCAPE_CHARACTER='\';
             ALTER SYSTEM SET HASHTYPE_FORMAT='HEX';
+			ALTER SYSTEM SET IDLE_TIMEOUT='86400';
             ALTER SYSTEM SET NLS_DATE_FORMAT='YYYY-MM-DD';
             ALTER SYSTEM SET NLS_DATE_LANGUAGE='ENG';
             ALTER SYSTEM SET NLS_FIRST_DAY_OF_WEEK=7;
@@ -169,6 +170,7 @@ func (s *testSuite) TestParameters() {
             ALTER SYSTEM SET SCRIPT_LANGUAGES='PYTHON=builtin_python R=builtin_r JAVA=builtin_java PYTHON3=builtin_python3';
             ALTER SYSTEM SET SCRIPT_OUTPUT_ADDRESS='';
 			ALTER SYSTEM SET SESSION_TEMP_DB_RAM_LIMIT='OFF';
+			ALTER SYSTEM SET SNAPSHOT_MODE='SYSTEM TABLES';
             ALTER SYSTEM SET SQL_PREPROCESSOR_SCRIPT=;
 			ALTER SYSTEM SET ST_MAX_DECIMAL_DIGITS='16';
 			ALTER SYSTEM SET TEMP_DB_RAM_LIMIT='OFF';
@@ -447,12 +449,12 @@ func (s *testSuite) TestScripts() {
 
 func (s *testSuite) TestUsers() {
 	password := regexp.MustCompile(`"12345678"`)
-	user1SQL := "CREATE USER JOE IDENTIFIED BY \"12345678\";\n"
-	user2SQL := "CREATE USER JANE IDENTIFIED BY KERBEROS PRINCIPAL 'jane';\n"
-	user3SQL := "CREATE USER JOHN IDENTIFIED AT LDAP AS 'john'"
-	commentSQL := "COMMENT ON USER JOE IS 'a tough guy';\n"
-	policySQL := "ALTER USER JOE SET PASSWORD_EXPIRY_POLICY='EXPIRY_DAYS=180:GRACE_DAYS=30';\n"
-	expireSQL := "ALTER USER JOE PASSWORD EXPIRE;\n"
+	user1SQL := "CREATE USER [JOE] IDENTIFIED BY \"12345678\";\n"
+	user2SQL := "CREATE USER [JANE] IDENTIFIED BY KERBEROS PRINCIPAL 'jane';\n"
+	user3SQL := "CREATE USER [JOHN] IDENTIFIED AT LDAP AS 'john'"
+	commentSQL := "COMMENT ON USER [JOE] IS 'a tough guy';\n"
+	policySQL := "ALTER USER [JOE] SET PASSWORD_EXPIRY_POLICY='EXPIRY_DAYS=180:GRACE_DAYS=30';\n"
+	expireSQL := "ALTER USER [JOE] PASSWORD EXPIRE;\n"
 	cleanUser1SQL := password.ReplaceAllString(user1SQL, "********")
 
 	s.execute("DROP USER IF EXISTS joe")
@@ -470,17 +472,17 @@ func (s *testSuite) TestUsers() {
 }
 
 func (s *testSuite) TestRoles() {
-	roleSQL := "CREATE ROLE LUMBERJACKS;\n"
-	groupSQL := "ALTER ROLE LUMBERJACKS SET CONSUMER_GROUP = [LOW];\n"
-	commentSQL := "COMMENT ON ROLE LUMBERJACKS IS 'tough guys';\n"
+	roleSQL := "CREATE ROLE [LUMBERJACKS];\n"
+	groupSQL := "ALTER ROLE [LUMBERJACKS] SET CONSUMER_GROUP = [LOW];\n"
+	commentSQL := "COMMENT ON ROLE [LUMBERJACKS] IS 'tough guys';\n"
 
 	s.execute("DROP ROLE IF EXISTS lumberjacks")
 	s.execute(roleSQL, groupSQL, commentSQL)
 	s.backup(Conf{}, ROLES)
 	s.expect(dt{
 		"roles": dt{
-			"DBA.sql":         "COMMENT ON ROLE DBA IS 'DBA stands for database administrator and has all possible privileges. This role should only be assigned to very few users because it provides these with full access to the database.';\n",
-			"PUBLIC.sql":      "COMMENT ON ROLE PUBLIC IS 'The PUBLIC role stands apart because every user receives this role automatically. This makes it very simple to grant and later withdraw certain privileges to/from all users of the database. However, this should only occur if one is quite sure that it is safe to grant the respective rights and the shared data should be publicly accessible.';\nGRANT USE ANY SCHEMA TO PUBLIC;\n",
+			"DBA.sql":         "COMMENT ON ROLE [DBA] IS 'DBA stands for database administrator and has all possible privileges. This role should only be assigned to very few users because it provides these with full access to the database.';\n",
+			"PUBLIC.sql":      "COMMENT ON ROLE [PUBLIC] IS 'The PUBLIC role stands apart because every user receives this role automatically. This makes it very simple to grant and later withdraw certain privileges to/from all users of the database. However, this should only occur if one is quite sure that it is safe to grant the respective rights and the shared data should be publicly accessible.';\nGRANT USE ANY SCHEMA TO [PUBLIC];\n",
 			"LUMBERJACKS.sql": roleSQL + groupSQL + commentSQL,
 		},
 	})
@@ -570,21 +572,21 @@ func (s *testSuite) TestConsumerGroups() {
 }
 
 func (s *testSuite) TestPrivileges() {
-	prioritySQL := "GRANT PRIORITY GROUP [LOW] TO JOE"
+	prioritySQL := "GRANT PRIORITY GROUP [LOW] TO [JOE]"
 	if capability.consumerGroups {
-		prioritySQL = "ALTER USER JOE SET CONSUMER_GROUP = [LOW]"
+		prioritySQL = "ALTER USER [JOE] SET CONSUMER_GROUP = [LOW]"
 	}
 	sql := []string{
-		"CREATE USER JOE IDENTIFIED BY KERBEROS PRINCIPAL 'joe'",
+		"CREATE USER [JOE] IDENTIFIED BY KERBEROS PRINCIPAL 'joe'",
 		prioritySQL, // Priority Priv
-		"GRANT CONNECTION CONN TO JOE WITH ADMIN OPTION",                   // Connection Priv
-		"GRANT SELECT ON SCHEMA [test] TO JOE",                             // Object Priv
-		"GRANT ACCESS ON CONNECTION [CONN] FOR SCRIPT [test].[SCR] TO JOE", // Connection Restricted Priv
-		"GRANT ACCESS ON CONNECTION [CONN] FOR SCHEMA [test] TO JOE",       // Connection Restricted Priv
-		"GRANT DBA TO JOE WITH ADMIN OPTION",                               // Role Priv
-		"GRANT SELECT ANY TABLE TO JOE WITH ADMIN OPTION",                  // System Priv
-		"GRANT IMPERSONATION ON DBA TO JOE",                                // Impersonation Priv
-		"ALTER SCHEMA [test] CHANGE OWNER JOE",                             // Schema Owner
+		"GRANT CONNECTION CONN TO [JOE] WITH ADMIN OPTION",                   // Connection Priv
+		"GRANT ACCESS ON CONNECTION [CONN] FOR SCRIPT [test].[SCR] TO [JOE]", // Connection Restricted Priv
+		"GRANT ACCESS ON CONNECTION [CONN] FOR SCHEMA [test] TO [JOE]",       // Connection Restricted Priv
+		"GRANT SELECT ON SCHEMA [test] TO [JOE]",                             // Object Priv
+		"GRANT [DBA] TO [JOE] WITH ADMIN OPTION",                             // Role Priv
+		"GRANT SELECT ANY TABLE TO [JOE] WITH ADMIN OPTION",                  // System Priv
+		"GRANT IMPERSONATION ON [DBA] TO [JOE]",                              // Impersonation Priv
+		"ALTER SCHEMA [test] CHANGE OWNER [JOE]",                             // Schema Owner
 	}
 	s.execute("DROP USER IF EXISTS joe")
 	s.execute("DROP CONNECTION IF EXISTS conn")

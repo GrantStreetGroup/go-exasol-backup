@@ -92,17 +92,17 @@ func createRole(dst string, r *role) error {
 
 	var sql string
 	if r.name != "DBA" && r.name != "PUBLIC" {
-		sql = "CREATE ROLE " + r.name + ";\n"
+		sql = "CREATE ROLE [" + r.name + "];\n"
 	}
 	if r.consumerGroup != "" {
 		if capability.consumerGroups {
-			sql += fmt.Sprintf("ALTER ROLE %s SET CONSUMER_GROUP = [%s];\n", r.name, r.consumerGroup)
+			sql += fmt.Sprintf("ALTER ROLE [%s] SET CONSUMER_GROUP = [%s];\n", r.name, r.consumerGroup)
 		} else {
 			sql += fmt.Sprintf("GRANT PRIORITY GROUP [%s] TO %s;\n", r.consumerGroup, r.name)
 		}
 	}
 	if r.comment != "" {
-		sql += fmt.Sprintf("COMMENT ON ROLE %s IS '%s';\n", r.name, qStr(r.comment))
+		sql += fmt.Sprintf("COMMENT ON ROLE [%s] IS '%s';\n", r.name, qStr(r.comment))
 	}
 
 	file := filepath.Join(dst, r.name+".sql")
