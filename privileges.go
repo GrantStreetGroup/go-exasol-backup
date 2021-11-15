@@ -37,7 +37,7 @@ func backupConnectionPrivs(src *exasol.Conn, dst string, grantees []string) erro
 	log.Info("Backing up connection privileges")
 
 	sql := fmt.Sprintf(`
-		SELECT grantee, granted_connection, admin_option
+		SELECT DISTINCT grantee, granted_connection, admin_option
 		FROM exa_dba_connection_privs
 		WHERE grantee IN (%s)
 		ORDER BY 1, 2
@@ -51,7 +51,7 @@ func backupConnectionPrivs(src *exasol.Conn, dst string, grantees []string) erro
 		grantee := row[0].(string)
 		connection := row[1].(string)
 		adminOption := row[2].(bool)
-		sql := fmt.Sprintf("GRANT CONNECTION %s TO %s", connection, grantee)
+		sql := fmt.Sprintf("GRANT CONNECTION %s TO [%s]", connection, grantee)
 		if adminOption {
 			sql += " WITH ADMIN OPTION"
 		}
@@ -68,7 +68,7 @@ func backupObjectPrivs(src *exasol.Conn, dst string, grantees []string) error {
 	log.Info("Backing up object privileges")
 
 	sql := fmt.Sprintf(`
-		SELECT object_schema, object_name, object_type,
+		SELECT DISTINCT object_schema, object_name, object_type,
 		       privilege, grantee
 		FROM exa_dba_obj_privs
 		WHERE grantee IN (%s)
@@ -91,7 +91,7 @@ func backupObjectPrivs(src *exasol.Conn, dst string, grantees []string) error {
 			object = row[0].(string) + "].[" + row[1].(string)
 		}
 
-		sql := fmt.Sprintf("GRANT %s ON %s [%s] TO %s;\n", privilege, objType, object, grantee)
+		sql := fmt.Sprintf("GRANT %s ON %s [%s] TO [%s];\n", privilege, objType, object, grantee)
 		err = appendToObjFile(dst, grantee, sql)
 		if err != nil {
 			return err
@@ -104,7 +104,7 @@ func backupRestrictedObjectPrivs(src *exasol.Conn, dst string, grantees []string
 	log.Info("Backing up restricted object privileges")
 
 	sql := fmt.Sprintf(`
-		SELECT object_schema, object_name, object_type,
+		SELECT DISTINCT object_schema, object_name, object_type,
 			   for_object_schema, for_object_name, for_object_type,
 		       privilege, grantee
 		FROM exa_dba_restricted_obj_privs
@@ -136,7 +136,7 @@ func backupRestrictedObjectPrivs(src *exasol.Conn, dst string, grantees []string
 		}
 
 		sql := fmt.Sprintf(
-			`GRANT %s ON %s [%s] FOR %s [%s] TO %s;`+"\n",
+			`GRANT %s ON %s [%s] FOR %s [%s] TO [%s];`+"\n",
 			privilege, objType, object, forObjType, forObject, grantee,
 		)
 		err = appendToObjFile(dst, grantee, sql)
@@ -151,7 +151,7 @@ func backupRolePrivs(src *exasol.Conn, dst string, grantees []string) error {
 	log.Info("Backing up role privileges")
 
 	sql := fmt.Sprintf(`
-		SELECT grantee, granted_role, admin_option
+		SELECT DISTINCT grantee, granted_role, admin_option
 		FROM exa_dba_role_privs
 		WHERE grantee IN (%s)
 		ORDER BY 1, 2
@@ -166,7 +166,7 @@ func backupRolePrivs(src *exasol.Conn, dst string, grantees []string) error {
 		role := row[1].(string)
 		adminOption := row[2].(bool)
 
-		sql := fmt.Sprintf("GRANT %s TO %s", role, grantee)
+		sql := fmt.Sprintf("GRANT [%s] TO [%s]", role, grantee)
 		if adminOption {
 			sql += " WITH ADMIN OPTION"
 		}
@@ -183,7 +183,7 @@ func backupSystemPrivs(src *exasol.Conn, dst string, grantees []string) error {
 	log.Info("Backing up system privileges")
 
 	sql := fmt.Sprintf(`
-		SELECT grantee, privilege, admin_option
+		SELECT DISTINCT grantee, privilege, admin_option
 		FROM exa_dba_sys_privs
 		WHERE grantee IN (%s)
 		ORDER BY 1, 2
@@ -198,7 +198,7 @@ func backupSystemPrivs(src *exasol.Conn, dst string, grantees []string) error {
 		privilege := row[1].(string)
 		adminOption := row[2].(bool)
 
-		sql := fmt.Sprintf("GRANT %s TO %s", privilege, grantee)
+		sql := fmt.Sprintf("GRANT %s TO [%s]", privilege, grantee)
 		if adminOption {
 			sql += " WITH ADMIN OPTION"
 		}
@@ -215,7 +215,7 @@ func backupImpersonationPrivs(src *exasol.Conn, dst string, grantees []string) e
 	log.Info("Backing up impersonation privileges")
 
 	sql := fmt.Sprintf(`
-		SELECT grantee, impersonation_on
+		SELECT DISTINCT grantee, impersonation_on
 		FROM exa_dba_impersonation_privs
 		WHERE grantee IN (%s)
 		ORDER BY 1, 2
@@ -229,7 +229,7 @@ func backupImpersonationPrivs(src *exasol.Conn, dst string, grantees []string) e
 		grantee := row[0].(string)
 		impersonationOn := row[1].(string)
 
-		sql := fmt.Sprintf("GRANT IMPERSONATION ON %s TO %s;\n", impersonationOn, grantee)
+		sql := fmt.Sprintf("GRANT IMPERSONATION ON [%s] TO [%s];\n", impersonationOn, grantee)
 		err = appendToObjFile(dst, grantee, sql)
 		if err != nil {
 			return err
@@ -264,7 +264,7 @@ func backupSchemaOwners(src *exasol.Conn, dst string, grantees []string) error {
 			virtual = "VIRTUAL "
 		}
 
-		sql := fmt.Sprintf("ALTER %sSCHEMA [%s] CHANGE OWNER %s;\n", virtual, schema, owner)
+		sql := fmt.Sprintf("ALTER %sSCHEMA [%s] CHANGE OWNER [%s];\n", virtual, schema, owner)
 		err = appendToObjFile(dst, owner, sql)
 		if err != nil {
 			return err
