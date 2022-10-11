@@ -452,6 +452,7 @@ func (s *testSuite) TestUsers() {
 	user1SQL := "CREATE USER [JOE] IDENTIFIED BY \"12345678\";\n"
 	user2SQL := "CREATE USER [JANE] IDENTIFIED BY KERBEROS PRINCIPAL 'jane';\n"
 	user3SQL := "CREATE USER [JOHN] IDENTIFIED AT LDAP AS 'john'"
+	user4SQL := "CREATE USER [JENN] IDENTIFIED BY OPENID SUBJECT 'jenn';\n"
 	commentSQL := "COMMENT ON USER [JOE] IS 'a tough guy';\n"
 	policySQL := "ALTER USER [JOE] SET PASSWORD_EXPIRY_POLICY='EXPIRY_DAYS=180:GRACE_DAYS=30';\n"
 	expireSQL := "ALTER USER [JOE] PASSWORD EXPIRE;\n"
@@ -460,13 +461,15 @@ func (s *testSuite) TestUsers() {
 	s.execute("DROP USER IF EXISTS joe")
 	s.execute("DROP USER IF EXISTS jane")
 	s.execute("DROP USER IF EXISTS john")
-	s.execute(user1SQL, user2SQL, user3SQL+" FORCE", commentSQL, policySQL, expireSQL)
+	s.execute("DROP USER IF EXISTS jenn")
+	s.execute(user1SQL, user2SQL, user3SQL+" FORCE", user4SQL, commentSQL, policySQL, expireSQL)
 	s.backup(Conf{}, USERS)
 	s.expect(dt{
 		"users": dt{
 			"JOE.sql":  cleanUser1SQL + commentSQL + policySQL + expireSQL,
 			"JANE.sql": user2SQL,
 			"JOHN.sql": user3SQL + ";\n",
+			"JENN.sql": user4SQL,
 		},
 	})
 }

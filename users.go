@@ -12,6 +12,7 @@ import (
 type user struct {
 	name          string
 	ldapDN        string
+	openIDSubj    string
 	kerberos      string
 	consumerGroup string
 	comment       string
@@ -69,7 +70,8 @@ func getUsersToBackup(conn *exasol.Conn) ([]*user, error) {
 			   %s,
 			   user_comment,
 			   password_state,
-			   password_expiry_policy
+			   password_expiry_policy,
+			   openid_subject
 		FROM exa_dba_users
 		WHERE user_name != 'SYS'
 		ORDER BY local.s`,
@@ -101,6 +103,9 @@ func getUsersToBackup(conn *exasol.Conn) ([]*user, error) {
 		if row[7] != nil {
 			u.passPolicy = row[7].(string)
 		}
+		if row[8] != nil {
+			u.openIDSubj = row[8].(string)
+		}
 		users = append(users, u)
 	}
 	return users, nil
@@ -119,6 +124,11 @@ func backupUser(dst string, u *user) error {
 		sql = fmt.Sprintf(
 			"CREATE USER [%s] IDENTIFIED AT LDAP AS '%s';\n",
 			u.name, u.ldapDN,
+		)
+	} else if u.openIDSubj != "" {
+		sql = fmt.Sprintf(
+			"CREATE USER [%s] IDENTIFIED BY OPENID SUBJECT '%s';\n",
+			u.name, u.openIDSubj,
 		)
 	} else {
 		// If the user is setup with a non-LDAP account
