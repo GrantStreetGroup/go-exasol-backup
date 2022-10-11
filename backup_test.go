@@ -514,26 +514,34 @@ func (s *testSuite) TestConsumerGroups() {
 				"   CPU_WEIGHT = 234,\n" +
 				"   GROUP_TEMP_DB_RAM_LIMIT = 'OFF',\n" +
 				"   USER_TEMP_DB_RAM_LIMIT = 'OFF',\n" +
-				"   SESSION_TEMP_DB_RAM_LIMIT = 'OFF'",
+				"   SESSION_TEMP_DB_RAM_LIMIT = 'OFF',\n" +
+				"   QUERY_TIMEOUT = 0,\n" +
+				"   IDLE_TIMEOUT = 86400",
 			"ALTER CONSUMER GROUP [MEDIUM] SET\n" +
 				"   PRECEDENCE = 1,\n" +
 				"   CPU_WEIGHT = 456,\n" +
 				"   GROUP_TEMP_DB_RAM_LIMIT = '500',\n" +
 				"   USER_TEMP_DB_RAM_LIMIT = '678',\n" +
-				"   SESSION_TEMP_DB_RAM_LIMIT = 'OFF'",
+				"   SESSION_TEMP_DB_RAM_LIMIT = 'OFF',\n" +
+				"   QUERY_TIMEOUT = 0,\n" +
+				"   IDLE_TIMEOUT = 86400",
 			"ALTER CONSUMER GROUP [SYS_CONSUMER_GROUP] SET\n" +
 				"   PRECEDENCE = 1000,\n" +
 				"   CPU_WEIGHT = 1000,\n" +
 				"   GROUP_TEMP_DB_RAM_LIMIT = 'OFF',\n" +
 				"   USER_TEMP_DB_RAM_LIMIT = 'OFF',\n" +
-				"   SESSION_TEMP_DB_RAM_LIMIT = 'OFF'",
+				"   SESSION_TEMP_DB_RAM_LIMIT = 'OFF',\n" +
+				"   QUERY_TIMEOUT = 0,\n" +
+				"   IDLE_TIMEOUT = 86400",
 			"DROP CONSUMER GROUP [custom]",
 			"CREATE CONSUMER GROUP [custom] WITH\n" +
 				"  PRECEDENCE = 123,\n" +
 				"  CPU_WEIGHT = 456,\n" +
 				"  GROUP_TEMP_DB_RAM_LIMIT = '1234',\n" +
 				"  USER_TEMP_DB_RAM_LIMIT = '2345',\n" +
-				"  SESSION_TEMP_DB_RAM_LIMIT = '3456'",
+				"  SESSION_TEMP_DB_RAM_LIMIT = '3456',\n" +
+				"  QUERY_TIMEOUT = 78,\n" +
+				"  IDLE_TIMEOUT = 90",
 			"COMMENT ON CONSUMER GROUP [custom] IS 'the big cheeses'",
 			"DROP CONSUMER GROUP [high]",
 			"CREATE CONSUMER GROUP [high] WITH\n" +
@@ -541,7 +549,9 @@ func (s *testSuite) TestConsumerGroups() {
 				"   CPU_WEIGHT = 456,\n" +
 				"   GROUP_TEMP_DB_RAM_LIMIT = 'OFF',\n" +
 				"   USER_TEMP_DB_RAM_LIMIT = 'OFF',\n" +
-				"   SESSION_TEMP_DB_RAM_LIMIT = 'OFF'",
+				"   SESSION_TEMP_DB_RAM_LIMIT = 'OFF',\n" +
+				"   QUERY_TIMEOUT = 0,\n" +
+				"   IDLE_TIMEOUT = 86400",
 		}
 		s.execute("DROP CONSUMER GROUP HIGH")
 		s.execute("DROP CONSUMER GROUP LOW")

@@ -19,6 +19,8 @@ type consumerGroup struct {
 	groupTempDBRAMLimit   int
 	userTempDBRAMLimit    int
 	sessionTempDBRAMLimit int
+	queryTimeout          int
+	idleTimeout           int
 	comment               string
 }
 
@@ -73,6 +75,8 @@ func getConsumerGroupsToBackup(conn *exasol.Conn) ([]*consumerGroup, error) {
 			   group_temp_db_ram_limit,
 			   user_temp_db_ram_limit,
 			   session_temp_db_ram_limit,
+			   query_timeout,
+			   idle_timeout,
 			   consumer_group_comment
 		FROM exa_consumer_groups
 		ORDER BY consumer_group_name
@@ -99,7 +103,13 @@ func getConsumerGroupsToBackup(conn *exasol.Conn) ([]*consumerGroup, error) {
 			p.sessionTempDBRAMLimit = int(row[5].(float64))
 		}
 		if row[6] != nil {
-			p.comment = row[6].(string)
+			p.queryTimeout = int(row[6].(float64))
+		}
+		if row[7] != nil {
+			p.idleTimeout = int(row[7].(float64))
+		}
+		if row[8] != nil {
+			p.comment = row[8].(string)
 		}
 		consumerGroups = append(consumerGroups, p)
 	}
@@ -129,11 +139,14 @@ func createConsumerGroup(p *consumerGroup) string {
 		"   CPU_WEIGHT = %d,\n"+
 		"   GROUP_TEMP_DB_RAM_LIMIT = '%s',\n"+
 		"   USER_TEMP_DB_RAM_LIMIT = '%s',\n"+
-		"   SESSION_TEMP_DB_RAM_LIMIT = '%s';\n",
+		"   SESSION_TEMP_DB_RAM_LIMIT = '%s',\n"+
+		"   QUERY_TIMEOUT = %d,\n"+
+		"   IDLE_TIMEOUT = %d;\n",
 		sql, p.precedence, p.cpuWeight,
 		limit(p.groupTempDBRAMLimit),
 		limit(p.userTempDBRAMLimit),
 		limit(p.sessionTempDBRAMLimit),
+		p.queryTimeout, p.idleTimeout,
 	)
 	if p.comment != "" {
 		sql += fmt.Sprintf(
