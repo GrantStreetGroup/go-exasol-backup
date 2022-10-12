@@ -452,6 +452,7 @@ func (s *testSuite) TestUsers() {
 	user1SQL := "CREATE USER [JOE] IDENTIFIED BY \"12345678\";\n"
 	user2SQL := "CREATE USER [JANE] IDENTIFIED BY KERBEROS PRINCIPAL 'jane';\n"
 	user3SQL := "CREATE USER [JOHN] IDENTIFIED AT LDAP AS 'john'"
+	user4SQL := "CREATE USER [JENN] IDENTIFIED BY OPENID SUBJECT 'jenn';\n"
 	commentSQL := "COMMENT ON USER [JOE] IS 'a tough guy';\n"
 	policySQL := "ALTER USER [JOE] SET PASSWORD_EXPIRY_POLICY='EXPIRY_DAYS=180:GRACE_DAYS=30';\n"
 	expireSQL := "ALTER USER [JOE] PASSWORD EXPIRE;\n"
@@ -460,13 +461,15 @@ func (s *testSuite) TestUsers() {
 	s.execute("DROP USER IF EXISTS joe")
 	s.execute("DROP USER IF EXISTS jane")
 	s.execute("DROP USER IF EXISTS john")
-	s.execute(user1SQL, user2SQL, user3SQL+" FORCE", commentSQL, policySQL, expireSQL)
+	s.execute("DROP USER IF EXISTS jenn")
+	s.execute(user1SQL, user2SQL, user3SQL+" FORCE", user4SQL, commentSQL, policySQL, expireSQL)
 	s.backup(Conf{}, USERS)
 	s.expect(dt{
 		"users": dt{
 			"JOE.sql":  cleanUser1SQL + commentSQL + policySQL + expireSQL,
 			"JANE.sql": user2SQL,
 			"JOHN.sql": user3SQL + ";\n",
+			"JENN.sql": user4SQL,
 		},
 	})
 }
@@ -511,26 +514,34 @@ func (s *testSuite) TestConsumerGroups() {
 				"   CPU_WEIGHT = 234,\n" +
 				"   GROUP_TEMP_DB_RAM_LIMIT = 'OFF',\n" +
 				"   USER_TEMP_DB_RAM_LIMIT = 'OFF',\n" +
-				"   SESSION_TEMP_DB_RAM_LIMIT = 'OFF'",
+				"   SESSION_TEMP_DB_RAM_LIMIT = 'OFF',\n" +
+				"   QUERY_TIMEOUT = 0,\n" +
+				"   IDLE_TIMEOUT = 86400",
 			"ALTER CONSUMER GROUP [MEDIUM] SET\n" +
 				"   PRECEDENCE = 1,\n" +
 				"   CPU_WEIGHT = 456,\n" +
 				"   GROUP_TEMP_DB_RAM_LIMIT = '500',\n" +
 				"   USER_TEMP_DB_RAM_LIMIT = '678',\n" +
-				"   SESSION_TEMP_DB_RAM_LIMIT = 'OFF'",
+				"   SESSION_TEMP_DB_RAM_LIMIT = 'OFF',\n" +
+				"   QUERY_TIMEOUT = 0,\n" +
+				"   IDLE_TIMEOUT = 86400",
 			"ALTER CONSUMER GROUP [SYS_CONSUMER_GROUP] SET\n" +
 				"   PRECEDENCE = 1000,\n" +
 				"   CPU_WEIGHT = 1000,\n" +
 				"   GROUP_TEMP_DB_RAM_LIMIT = 'OFF',\n" +
 				"   USER_TEMP_DB_RAM_LIMIT = 'OFF',\n" +
-				"   SESSION_TEMP_DB_RAM_LIMIT = 'OFF'",
+				"   SESSION_TEMP_DB_RAM_LIMIT = 'OFF',\n" +
+				"   QUERY_TIMEOUT = 0,\n" +
+				"   IDLE_TIMEOUT = 86400",
 			"DROP CONSUMER GROUP [custom]",
 			"CREATE CONSUMER GROUP [custom] WITH\n" +
 				"  PRECEDENCE = 123,\n" +
 				"  CPU_WEIGHT = 456,\n" +
 				"  GROUP_TEMP_DB_RAM_LIMIT = '1234',\n" +
 				"  USER_TEMP_DB_RAM_LIMIT = '2345',\n" +
-				"  SESSION_TEMP_DB_RAM_LIMIT = '3456'",
+				"  SESSION_TEMP_DB_RAM_LIMIT = '3456',\n" +
+				"  QUERY_TIMEOUT = 78,\n" +
+				"  IDLE_TIMEOUT = 90",
 			"COMMENT ON CONSUMER GROUP [custom] IS 'the big cheeses'",
 			"DROP CONSUMER GROUP [high]",
 			"CREATE CONSUMER GROUP [high] WITH\n" +
@@ -538,7 +549,9 @@ func (s *testSuite) TestConsumerGroups() {
 				"   CPU_WEIGHT = 456,\n" +
 				"   GROUP_TEMP_DB_RAM_LIMIT = 'OFF',\n" +
 				"   USER_TEMP_DB_RAM_LIMIT = 'OFF',\n" +
-				"   SESSION_TEMP_DB_RAM_LIMIT = 'OFF'",
+				"   SESSION_TEMP_DB_RAM_LIMIT = 'OFF',\n" +
+				"   QUERY_TIMEOUT = 0,\n" +
+				"   IDLE_TIMEOUT = 86400",
 		}
 		s.execute("DROP CONSUMER GROUP HIGH")
 		s.execute("DROP CONSUMER GROUP LOW")
