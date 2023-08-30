@@ -192,6 +192,7 @@ type dbObj interface {
 
 type capabilities struct {
 	consumerGroups bool
+	version        float64
 }
 
 var log = logrus.New()
@@ -331,10 +332,24 @@ func qStr(str string) string {
 
 func setCapabilities(conn *exasol.Conn) {
 	capability = capabilities{}
+
 	res, _ := conn.FetchSlice(`
 		SELECT COUNT(*) > 0
 		FROM exa_syscat
 		WHERE object_name = 'EXA_CONSUMER_GROUPS'
 	`)
 	capability.consumerGroups = res[0][0].(bool)
+
+	res, _ = conn.FetchSlice(`
+		SELECT CAST( CONCAT(
+			SELECT param_value
+			FROM exa_metadata
+			WHERE param_name = 'databaseMajorVersion',
+			  '.',
+			SELECT param_value
+			FROM exa_metadata
+			WHERE param_name = 'databaseMinorVersion'
+		  ) AS DOUBLE ) AS version
+	`)
+	capability.version = res[0][0].(float64)
 }

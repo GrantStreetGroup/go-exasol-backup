@@ -64,12 +64,17 @@ func BackupSchemas(src *exasol.Conn, dst string, crit Criteria, dropExtras bool)
 }
 
 func getSchemasToBackup(conn *exasol.Conn, crit Criteria) ([]*schema, []dbObj, error) {
+	adapterColumn := "adapter_script"
+	if capability.version >= 8 {
+		adapterColumn = `CONCAT(adapter_script_schema,'.',adapter_script_name)`
+	}
+
 	sql := fmt.Sprintf(`
 		SELECT s.schema_name AS s,
 			   s.schema_name AS o,
 			   schema_comment,
 			   schema_is_virtual,
-			   adapter_script,
+			   %s,
 			   raw_object_size_limit
 		FROM exa_schemas AS s
 		JOIN exa_all_object_sizes AS os
@@ -79,7 +84,7 @@ func getSchemasToBackup(conn *exasol.Conn, crit Criteria) ([]*schema, []dbObj, e
 		  ON s.schema_name = vs.schema_name
 		WHERE %s
 		ORDER BY local.s
-		`, crit.getSQLCriteria(),
+		`, adapterColumn, crit.getSQLCriteria(),
 	)
 	res, err := conn.FetchSlice(sql)
 	if err != nil {
