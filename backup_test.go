@@ -509,6 +509,15 @@ func (s *testSuite) TestConnections() {
 	})
 }
 
+func (s *testSuite) TestEmptyConnections() {
+	connSQL := "CREATE OR REPLACE CONNECTION CONN TO '' USER '' IDENTIFIED BY '';\n"
+	cleanConnSQL := regexp.MustCompile(`'';`).ReplaceAllString(connSQL, "********;")
+	s.execute("DROP CONNECTION IF EXISTS conn")
+	s.execute(connSQL)
+	s.backup(Conf{}, CONNECTIONS)
+	s.expect(dt{"connections.sql": cleanConnSQL})
+}
+
 func (s *testSuite) TestConsumerGroups() {
 	if capability.consumerGroups {
 		groupSQL := []string{

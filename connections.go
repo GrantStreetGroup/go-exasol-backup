@@ -60,9 +60,9 @@ func getConnectionsToBackup(conn *exasol.Conn) ([]*connection, error) {
 	}
 	connections := []*connection{}
 	for _, row := range res {
-		c := &connection{
-			name:    row[0].(string),
-			connStr: row[1].(string),
+		c := &connection{name: row[0].(string)}
+		if row[1] != nil {
+			c.connStr = row[1].(string)
 		}
 		if row[2] != nil {
 			c.username = row[2].(string)
