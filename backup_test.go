@@ -10,6 +10,7 @@
 package backup
 
 import (
+	"crypto/tls"
 	"flag"
 	"fmt"
 	"io/ioutil"
@@ -18,6 +19,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/grantstreetgroup/go-exasol-client"
 	"github.com/stretchr/testify/suite"
@@ -45,12 +47,13 @@ func TestBackups(t *testing.T) {
 	s.tmpDir = *testTmpdir
 	s.loglevel = *testLoglevel
 	s.exaConn, err = exasol.Connect(exasol.ConnConf{
-		Host:     *testHost,
-		Port:     uint16(*testPort),
-		Username: "SYS",
-		Password: *testPass,
-		Timeout:  10,
-		Logger:   log,
+		Host:         *testHost,
+		Port:         uint16(*testPort),
+		Username:     "SYS",
+		Password:     *testPass,
+		QueryTimeout: 10 * time.Second,
+		Logger:       log,
+		TLSConfig:    &tls.Config{InsecureSkipVerify: true},
 	})
 	if err != nil {
 		log.Fatalf("Unable to connect to Exasol: %s", err)
@@ -167,7 +170,8 @@ func (s *testSuite) TestParameters() {
             ALTER SYSTEM SET PROFILE='OFF';
             ALTER SYSTEM SET QUERY_CACHE='ON';
             ALTER SYSTEM SET QUERY_TIMEOUT=0;
-            ALTER SYSTEM SET SCRIPT_LANGUAGES='PYTHON=builtin_python R=builtin_r JAVA=builtin_java PYTHON3=builtin_python3';
+			ALTER SYSTEM SET REPLICATION_BORDER='100000';
+            ALTER SYSTEM SET SCRIPT_LANGUAGES='R=builtin_r JAVA=builtin_java PYTHON3=builtin_python3';
             ALTER SYSTEM SET SCRIPT_OUTPUT_ADDRESS='';
 			ALTER SYSTEM SET SESSION_TEMP_DB_RAM_LIMIT='OFF';
 			ALTER SYSTEM SET SNAPSHOT_MODE='SYSTEM TABLES';
@@ -184,10 +188,10 @@ func (s *testSuite) TestParameters() {
 
 func (s *testSuite) TestSchemas() {
 	adapterSQL := `
-CREATE PYTHON ADAPTER SCRIPT [test].vs_adapter AS
-import cjson
+CREATE PYTHON3 ADAPTER SCRIPT [test].vs_adapter AS
+import json
 def adapter_call(js):
-	req = cjson.decode(js)
+	req = json.loads(js)
 	reqType = req['type']
 	res = { 'type' : reqType }
 	if reqType == 'createVirtualSchema':
@@ -202,7 +206,7 @@ def adapter_call(js):
 		}
 	elif reqType == 'getCapabilities': res['capabilities'] = []
 	elif reqType == 'pushdown': res['sql'] = 'SELECT 1'
-	return cjson.encode(res).encode('utf-8')
+	return json.dumps(res)
 `
 	vSchemaSQL := `
 		CREATE VIRTUAL SCHEMA IF NOT EXISTS [testvs]
@@ -412,7 +416,7 @@ func (s *testSuite) TestScripts() {
 			return 1
 		end
 	`
-	script3SQL := `CREATE OR REPLACE PYTHON  ADAPTER SCRIPT "ADAPTER_SCRIPT" AS
+	script3SQL := `CREATE OR REPLACE PYTHON3  ADAPTER SCRIPT "ADAPTER_SCRIPT" AS
 		local str = 'hello'
 	`
 	commentSQL := "COMMENT ON SCRIPT [test].[SCRIPTING_SCRIPT] IS 'script comment';\n"
