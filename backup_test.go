@@ -6,6 +6,8 @@
 		https://github.com/exasol/docker-db
 
 	These tests expect Exasol v7.0+
+
+	Run tests via: go test -v -args -testify.m pattern
 */
 package backup
 
@@ -630,4 +632,63 @@ func (s *testSuite) TestPrivileges() {
 			"JOE.sql": strings.Join(sql, ";\n") + ";\n",
 		},
 	})
+}
+
+func (s *testSuite) TestCriteria() {
+	tests := [][]string{
+		// matchCriteria, skipCriteria, schemaToBeChecked, objectToBeChecked, expectedReturn
+		{"sch", "", "sch", "", "true"},
+		{"sch", "", "sch", "obj", "true"},
+		{"sch", "", "hcs", "", "false"},
+		{"sch", "", "hcs", "jbo", "false"},
+		{"sch.obj", "", "sch", "", "true"},
+		{"sch.obj", "", "sch", "obj", "true"},
+		{"sch.obj", "", "sch", "jbo", "false"},
+		{"sch.obj", "", "hcs", "", "false"},
+		{"sch.obj", "", "hcs", "jbo", "false"},
+
+		{"sch", "hcs", "sch", "", "true"},
+		{"sch", "hcs", "sch", "obj", "true"},
+		{"sch", "hcs", "hcs", "", "false"},
+		{"sch", "hcs", "hcs", "jbo", "false"},
+		{"sch.obj", "hcs", "sch", "", "true"},
+		{"sch.obj", "hcs", "sch", "obj", "true"},
+		{"sch.obj", "hcs", "sch", "jbo", "false"},
+		{"sch.obj", "hcs", "hcs", "", "false"},
+		{"sch.obj", "hcs", "hcs", "jbo", "false"},
+
+		{"sch", "hcs.bjo", "sch", "", "true"},
+		{"sch", "hcs.bjo", "sch", "obj", "true"},
+		{"sch", "hcs.bjo", "hcs", "", "false"},
+		{"sch", "hcs.bjo", "hcs", "jbo", "false"},
+		{"sch.obj", "hcs.bjo", "sch", "", "true"},
+		{"sch.obj", "hcs.bjo", "sch", "obj", "true"},
+		{"sch.obj", "hcs.bjo", "sch", "jbo", "false"},
+		{"sch.obj", "hcs.bjo", "hcs", "", "false"},
+		{"sch.obj", "hcs.bjo", "hcs", "jbo", "false"},
+
+		{"sch", "sch.bjo", "sch", "", "true"},
+		{"sch", "sch.bjo", "sch", "obj", "true"},
+		{"sch", "sch.bjo", "hcs", "", "false"},
+		{"sch", "sch.bjo", "hcs", "jbo", "false"},
+		{"sch.obj", "sch.bjo", "sch", "", "true"},
+		{"sch.obj", "sch.bjo", "sch", "obj", "true"},
+		{"sch.obj", "sch.bjo", "sch", "jbo", "false"},
+		{"sch.obj", "sch.bjo", "hcs", "", "false"},
+		{"sch.obj", "sch.bjo", "hcs", "jbo", "false"},
+
+		{"sch", "sch.obj", "sch", "", "true"},
+		{"sch", "sch.obj", "sch", "obj", "false"},
+		{"sch", "sch.obj", "hcs", "", "false"},
+		{"sch", "sch.obj", "hcs", "jbo", "false"},
+	}
+	for _, test := range tests {
+		crit := Criteria{
+			match: test[0],
+			skip:  test[1],
+		}
+		exp := test[4]
+		got := fmt.Sprintf("%v", crit.matches(test[2], test[3]))
+		s.Equal(exp, got)
+	}
 }
