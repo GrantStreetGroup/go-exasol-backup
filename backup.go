@@ -224,11 +224,11 @@ func (c *Criteria) getSQLCriteria() string {
 }
 
 func (c *Criteria) matches(schema, object string) bool {
-	return matchesCriteria(c.match, schema, object) &&
-		(c.skip == "" || !matchesCriteria(c.skip, schema, object))
+	return matchesCriteria(c.match, schema, object, false) &&
+		(c.skip == "" || !matchesCriteria(c.skip, schema, object, true))
 }
 
-func matchesCriteria(matchStr, schema, object string) bool {
+func matchesCriteria(matchStr, schema, object string, skipping bool) bool {
 	// Convert wildcards to regexp wildcard match
 	for _, match := range strings.Split(matchStr, ",") {
 		parts := strings.Split(match, ".")
@@ -240,7 +240,22 @@ func matchesCriteria(matchStr, schema, object string) bool {
 			objectPattern = ".*"
 		}
 		if regexp.MustCompile("(?i)^" + schemaPattern + "$").MatchString(schema) {
-			if object == "" || regexp.MustCompile("(?i)^"+objectPattern+"$").MatchString(object) {
+			if object == "" {
+				// if the object is "" it means where just checking if the schema
+				// as a whole should be matched or not.
+				if skipping == true {
+					// If we're checking a negative-match (skipping) criteria
+					// then we want to match (i.e skip) the schema
+					// if all objects are matched (i.e. skipped).
+					return objectPattern == ".*"
+				} else {
+					// If we're checking a positive-match (non-skip) criteria
+					// then we want to match the schema if *any* object
+					// is matched by the criteria and this is always the case.
+					return true
+				}
+			}
+			if regexp.MustCompile("(?i)^" + objectPattern + "$").MatchString(object) {
 				return true
 			}
 		}
