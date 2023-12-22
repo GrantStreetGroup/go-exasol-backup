@@ -73,6 +73,7 @@ func createParameter(p *parameter) string {
 	q := "'"
 	if p.name == "NLS_FIRST_DAY_OF_WEEK" ||
 		p.name == "QUERY_TIMEOUT" ||
+		p.name == "ST_MAX_DECIMAL_DIGITS" ||
 		p.name == "SQL_PREPROCESSOR_SCRIPT" ||
 		p.name == "DEFAULT_PRIORITY_GROUP" ||
 		p.name == "DEFAULT_CONSUMER_GROUP" {
