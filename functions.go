@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"regexp"
 
-	"github.com/grantstreetgroup/go-exasol-client"
+	"github.com/GrantStreetGroup/go-exasol-client"
 )
 
 type function struct {

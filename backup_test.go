@@ -23,7 +23,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/grantstreetgroup/go-exasol-client"
+	"github.com/GrantStreetGroup/go-exasol-client"
 	"github.com/stretchr/testify/suite"
 )
 

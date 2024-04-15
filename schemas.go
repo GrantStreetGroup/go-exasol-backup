@@ -5,9 +5,8 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
-	"strings"
 
-	"github.com/grantstreetgroup/go-exasol-client"
+	"github.com/GrantStreetGroup/go-exasol-client"
 )
 
 // This backs up schemas and virtual schemas.
