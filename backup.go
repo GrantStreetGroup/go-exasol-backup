@@ -13,7 +13,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/grantstreetgroup/go-exasol-client"
+	"github.com/GrantStreetGroup/go-exasol-client"
 	"github.com/sirupsen/logrus"
 )
 
@@ -29,7 +29,8 @@ const (
 	PRIORITY_GROUPS // Pre-Exasol 7.0
 	CONSUMER_GROUPS // Exasol 7.0+
 	ROLES
-	SCHEMAS // This would backup the (virtual)schema itself but nothing under it
+	SCHEMAS // This would backup the schema itself but nothing under it
+	VIRTUAL_SCHEMAS
 	SCRIPTS
 	TABLES
 	USERS
@@ -127,6 +128,12 @@ func Backup(cfg Conf) error {
 	}
 	if backup[SCHEMAS] || backup[ALL] {
 		err := BackupSchemas(src, dst, crit, drop)
+		if err != nil {
+			return err
+		}
+	}
+	if backup[VIRTUAL_SCHEMAS] || backup[ALL] {
+		err := BackupVirtualSchemas(src, dst, crit, drop)
 		if err != nil {
 			return err
 		}

@@ -23,7 +23,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/grantstreetgroup/go-exasol-client"
+	"github.com/GrantStreetGroup/go-exasol-client"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -178,7 +178,7 @@ func (s *testSuite) TestParameters() {
 			ALTER SYSTEM SET SESSION_TEMP_DB_RAM_LIMIT='OFF';
 			ALTER SYSTEM SET SNAPSHOT_MODE='SYSTEM TABLES';
             ALTER SYSTEM SET SQL_PREPROCESSOR_SCRIPT=;
-			ALTER SYSTEM SET ST_MAX_DECIMAL_DIGITS='16';
+			ALTER SYSTEM SET ST_MAX_DECIMAL_DIGITS=16;
 			ALTER SYSTEM SET TEMP_DB_RAM_LIMIT='OFF';
             ALTER SYSTEM SET TIMESTAMP_ARITHMETIC_BEHAVIOR='INTERVAL';
             ALTER SYSTEM SET TIME_ZONE='EUROPE/BERLIN';
@@ -189,6 +189,21 @@ func (s *testSuite) TestParameters() {
 }
 
 func (s *testSuite) TestSchemas() {
+	commentSQL := "COMMENT ON SCHEMA [test] IS 'HI MOM!!!';\n"
+	sizeSQL := "ALTER SCHEMA [test] SET RAW_SIZE_LIMIT = 1234567890;\n"
+
+	s.execute(commentSQL, sizeSQL)
+	s.backup(Conf{}, SCHEMAS)
+	s.expect(dt{
+		"schemas": dt{
+			"test": dt{
+				"schema.sql": s.schemaSQL + commentSQL + sizeSQL,
+			},
+		},
+	})
+}
+
+func (s *testSuite) TestVirtualSchemas() {
 	adapterSQL := `
 CREATE PYTHON3 ADAPTER SCRIPT [test].vs_adapter AS
 import json
@@ -217,16 +232,11 @@ def adapter_call(js):
 		  A = 'b'
 		  P = 'v';
 	`
-	commentSQL := "COMMENT ON SCHEMA [test] IS 'HI MOM!!!';\n"
-	sizeSQL := "ALTER SCHEMA [test] SET RAW_SIZE_LIMIT = 1234567890;\n"
 
-	s.execute(adapterSQL, vSchemaSQL, commentSQL, sizeSQL)
-	s.backup(Conf{}, SCHEMAS)
+	s.execute(adapterSQL, vSchemaSQL)
+	s.backup(Conf{}, VIRTUAL_SCHEMAS)
 	s.expect(dt{
 		"schemas": dt{
-			"test": dt{
-				"schema.sql": s.schemaSQL + commentSQL + sizeSQL,
-			},
 			"testvs": dt{
 				"schema.sql": vSchemaSQL + "\n",
 			},

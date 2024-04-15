@@ -9,8 +9,8 @@ The metadata is stored as SQL and data is stored as CSV.
 
 ```go
 import (
-    "github.com/grantstreetgroup/go-exasol-backup"
-    "github.com/grantstreetgroup/go-exasol-client"
+    "github.com/GrantStreetGroup/go-exasol-backup"
+    "github.com/GrantStreetGroup/go-exasol-client"
 )
 
 func main() {
