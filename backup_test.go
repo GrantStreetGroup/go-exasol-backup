@@ -189,10 +189,29 @@ func (s *testSuite) TestParameters() {
 }
 
 func (s *testSuite) TestSchemas() {
+	adapterSQL := `
+		CREATE LUA ADAPTER SCRIPT [test].vs_adapter AS
+		require 'cjson'
+		function adapter_call(req)
+			return cjson.encode({
+				type = cjson.decode(req).type,
+				schemaMetadata = {
+					tables = {{ name = 'T', columns = {{ name = 'C', dataType = { type = 'DATE' }}}}}
+				},
+				capabilities = {},
+				sql = 'SELECT 1',
+			})
+		end
+	`
+	vSchemaSQL := `
+		CREATE VIRTUAL SCHEMA IF NOT EXISTS [testvs]
+		USING [test].[VS_ADAPTER]
+	`
+
 	commentSQL := "COMMENT ON SCHEMA [test] IS 'HI MOM!!!';\n"
 	sizeSQL := "ALTER SCHEMA [test] SET RAW_SIZE_LIMIT = 1234567890;\n"
 
-	s.execute(commentSQL, sizeSQL)
+	s.execute(adapterSQL, vSchemaSQL, commentSQL, sizeSQL)
 	s.backup(Conf{}, SCHEMAS)
 	s.expect(dt{
 		"schemas": dt{
@@ -205,26 +224,19 @@ func (s *testSuite) TestSchemas() {
 
 func (s *testSuite) TestVirtualSchemas() {
 	adapterSQL := `
-CREATE PYTHON3 ADAPTER SCRIPT [test].vs_adapter AS
-import json
-def adapter_call(js):
-	req = json.loads(js)
-	reqType = req['type']
-	res = { 'type' : reqType }
-	if reqType == 'createVirtualSchema':
-		res['schemaMetadata'] = {
-			'tables': [{
-				'name': 'T',
-				'columns': [{
-					'name': 'C',
-					'dataType': {'type': 'VARCHAR', 'size': 1}
-				 }]
-			}]
-		}
-	elif reqType == 'getCapabilities': res['capabilities'] = []
-	elif reqType == 'pushdown': res['sql'] = 'SELECT 1'
-	return json.dumps(res)
-`
+		CREATE LUA ADAPTER SCRIPT [test].vs_adapter AS
+		require 'cjson'
+		function adapter_call(req)
+			return cjson.encode({
+				type = cjson.decode(req).type,
+				schemaMetadata = {
+					tables = {{ name = 'T', columns = {{ name = 'C', dataType = { type = 'DATE' }}}}}
+				},
+				capabilities = {},
+				sql = 'SELECT 1',
+			})
+		end
+	`
 	vSchemaSQL := `
 		CREATE VIRTUAL SCHEMA IF NOT EXISTS [testvs]
 	 	USING [test].[VS_ADAPTER]
