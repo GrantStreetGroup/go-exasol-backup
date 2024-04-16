@@ -60,6 +60,7 @@ func getSchemasToBackup(conn *exasol.Conn, crit Criteria) ([]*schema, []dbObj, e
 		  ON s.schema_name = os.object_name
 		 AND os.object_type = 'SCHEMA'
 		WHERE %s
+		  AND s.schema_is_virtual = FALSE
 		ORDER BY local.s
 		`, crit.getSQLCriteria(),
 	)
