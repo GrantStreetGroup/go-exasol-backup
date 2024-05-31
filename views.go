@@ -110,7 +110,7 @@ func backupView(dir string, v *view) error {
 
 	// We have to swap out the name too because if the view got renamed
 	// the v.text still references the original name.
-	r := regexp.MustCompile(`^(?is).*?CREATE[^V]+?VIEW\s+("?[\w_-]+"?\.)?"?[\w_-]+"?`)
+	r := regexp.MustCompile(`^(?is).*?CREATE[^V]+?VIEW\s+(("[^"]+"|[\w_-]+)\.)?("[^"]+"|[\w_-]+)`)
 	replacement := fmt.Sprintf(`CREATE OR REPLACE FORCE VIEW "%s"."%s"`, v.schema, v.name)
 	createView := r.ReplaceAllString(v.text, replacement)
 

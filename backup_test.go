@@ -1,13 +1,14 @@
 /*
-	When running this test suite be sure to run it against a completely
-	blank and default Exasol instance having only the SYS user.
+When running this test suite be sure to run it against a completely
+blank and default Exasol instance having only the SYS user.
 
-	We recommend using an Exasol docker container for this:
-		https://github.com/exasol/docker-db
+We recommend using an Exasol docker container for this:
 
-	These tests expect Exasol v7.0+
+	https://github.com/exasol/docker-db
 
-	Run tests via: go test -v -args -testify.m pattern
+These tests expect Exasol v7.0+
+
+Run tests via: go test -v -args -testify.m pattern
 */
 package backup
 
@@ -325,7 +326,7 @@ func (s *testSuite) TestTables() {
 
 func (s *testSuite) TestViews() {
 	openSchemaSQL := "OPEN SCHEMA [test];\n"
-	view1SQL := `CREATE OR REPLACE FORCE VIEW "test"."V1"
+	view1SQL := `CREATE OR REPLACE FORCE VIEW "test"."V 1"
 		  (c COMMENT IS 'column comment') AS
 			SELECT 'Hi Mom!!' AS col
 		  COMMENT IS 'view comment'`
@@ -336,8 +337,8 @@ func (s *testSuite) TestViews() {
 		"schemas": dt{
 			"test": dt{
 				"views": dt{
-					"V1.sql": openSchemaSQL + view1SQL + ";\n",
-					"V2.sql": openSchemaSQL + view2SQL + ";\n",
+					"V 1.sql": openSchemaSQL + view1SQL + ";\n",
+					"V2.sql":  openSchemaSQL + view2SQL + ";\n",
 				},
 			},
 		},
@@ -349,10 +350,10 @@ func (s *testSuite) TestViews() {
 		"schemas": dt{
 			"test": dt{
 				"views": dt{
-					"V1.sql": openSchemaSQL + view1SQL + ";\n",
-					"V1.csv": "\"Hi Mom!!\"\n",
-					"V2.sql": openSchemaSQL + view2SQL + ";\n",
-					"V2.csv": "1\n",
+					"V 1.sql": openSchemaSQL + view1SQL + ";\n",
+					"V 1.csv": "\"Hi Mom!!\"\n",
+					"V2.sql":  openSchemaSQL + view2SQL + ";\n",
+					"V2.csv":  "1\n",
 				},
 			},
 		},
@@ -365,16 +366,16 @@ func (s *testSuite) TestViews() {
 		"schemas": dt{
 			"test": dt{
 				"views": dt{
-					"V1.sql": openSchemaSQL + view1SQL + ";\n",
-					"V1.csv": "\"Hi Mom!!\"\n",
+					"V 1.sql": openSchemaSQL + view1SQL + ";\n",
+					"V 1.csv": "\"Hi Mom!!\"\n",
 				},
 			},
 		},
 	})
 
 	// Test renamed views
-	s.execute("RENAME VIEW v1 TO v3")
-	view3SQL := regexp.MustCompile("V1").ReplaceAllString(view1SQL, "V3")
+	s.execute("RENAME VIEW [V 1] TO v3")
+	view3SQL := regexp.MustCompile("V 1").ReplaceAllString(view1SQL, "V3")
 	s.backup(Conf{DropExtras: true}, VIEWS)
 	s.expect(dt{
 		"schemas": dt{
