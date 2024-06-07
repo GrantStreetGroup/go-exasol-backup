@@ -659,59 +659,67 @@ func (s *testSuite) TestPrivileges() {
 
 func (s *testSuite) TestCriteria() {
 	tests := [][]string{
-		// matchCriteria, skipCriteria, schemaToBeChecked, objectToBeChecked, expectedReturn
-		{"sch", "", "sch", "", "true"},
-		{"sch", "", "sch", "obj", "true"},
-		{"sch", "", "hcs", "", "false"},
-		{"sch", "", "hcs", "jbo", "false"},
-		{"sch.obj", "", "sch", "", "true"},
-		{"sch.obj", "", "sch", "obj", "true"},
-		{"sch.obj", "", "sch", "jbo", "false"},
-		{"sch.obj", "", "hcs", "", "false"},
-		{"sch.obj", "", "hcs", "jbo", "false"},
+		// regexpMatch, matchCriteria, skipCriteria, schemaToBeChecked, objectToBeChecked, expectedReturn
+		{"false", "sch", "", "sch", "", "true"},
+		{"false", "sch", "", "sch", "obj", "true"},
+		{"false", "sch", "", "hcs", "", "false"},
+		{"false", "sch", "", "hcs", "jbo", "false"},
+		{"false", "sch.obj", "", "sch", "", "true"},
+		{"false", "sch.obj", "", "sch", "obj", "true"},
+		{"false", "sch.obj", "", "sch", "jbo", "false"},
+		{"false", "sch.obj", "", "hcs", "", "false"},
+		{"false", "sch.obj", "", "hcs", "jbo", "false"},
 
-		{"sch", "hcs", "sch", "", "true"},
-		{"sch", "hcs", "sch", "obj", "true"},
-		{"sch", "hcs", "hcs", "", "false"},
-		{"sch", "hcs", "hcs", "jbo", "false"},
-		{"sch.obj", "hcs", "sch", "", "true"},
-		{"sch.obj", "hcs", "sch", "obj", "true"},
-		{"sch.obj", "hcs", "sch", "jbo", "false"},
-		{"sch.obj", "hcs", "hcs", "", "false"},
-		{"sch.obj", "hcs", "hcs", "jbo", "false"},
+		{"false", "sch", "hcs", "sch", "", "true"},
+		{"false", "sch", "hcs", "sch", "obj", "true"},
+		{"false", "sch", "hcs", "hcs", "", "false"},
+		{"false", "sch", "hcs", "hcs", "jbo", "false"},
+		{"false", "sch.obj", "hcs", "sch", "", "true"},
+		{"false", "sch.obj", "hcs", "sch", "obj", "true"},
+		{"false", "sch.obj", "hcs", "sch", "jbo", "false"},
+		{"false", "sch.obj", "hcs", "hcs", "", "false"},
+		{"false", "sch.obj", "hcs", "hcs", "jbo", "false"},
 
-		{"sch", "hcs.bjo", "sch", "", "true"},
-		{"sch", "hcs.bjo", "sch", "obj", "true"},
-		{"sch", "hcs.bjo", "hcs", "", "false"},
-		{"sch", "hcs.bjo", "hcs", "jbo", "false"},
-		{"sch.obj", "hcs.bjo", "sch", "", "true"},
-		{"sch.obj", "hcs.bjo", "sch", "obj", "true"},
-		{"sch.obj", "hcs.bjo", "sch", "jbo", "false"},
-		{"sch.obj", "hcs.bjo", "hcs", "", "false"},
-		{"sch.obj", "hcs.bjo", "hcs", "jbo", "false"},
+		{"false", "sch", "hcs.bjo", "sch", "", "true"},
+		{"false", "sch", "hcs.bjo", "sch", "obj", "true"},
+		{"false", "sch", "hcs.bjo", "hcs", "", "false"},
+		{"false", "sch", "hcs.bjo", "hcs", "jbo", "false"},
+		{"false", "sch.obj", "hcs.bjo", "sch", "", "true"},
+		{"false", "sch.obj", "hcs.bjo", "sch", "obj", "true"},
+		{"false", "sch.obj", "hcs.bjo", "sch", "jbo", "false"},
+		{"false", "sch.obj", "hcs.bjo", "hcs", "", "false"},
+		{"false", "sch.obj", "hcs.bjo", "hcs", "jbo", "false"},
 
-		{"sch", "sch.bjo", "sch", "", "true"},
-		{"sch", "sch.bjo", "sch", "obj", "true"},
-		{"sch", "sch.bjo", "hcs", "", "false"},
-		{"sch", "sch.bjo", "hcs", "jbo", "false"},
-		{"sch.obj", "sch.bjo", "sch", "", "true"},
-		{"sch.obj", "sch.bjo", "sch", "obj", "true"},
-		{"sch.obj", "sch.bjo", "sch", "jbo", "false"},
-		{"sch.obj", "sch.bjo", "hcs", "", "false"},
-		{"sch.obj", "sch.bjo", "hcs", "jbo", "false"},
+		{"false", "sch", "sch.bjo", "sch", "", "true"},
+		{"false", "sch", "sch.bjo", "sch", "obj", "true"},
+		{"false", "sch", "sch.bjo", "hcs", "", "false"},
+		{"false", "sch", "sch.bjo", "hcs", "jbo", "false"},
+		{"false", "sch.obj", "sch.bjo", "sch", "", "true"},
+		{"false", "sch.obj", "sch.bjo", "sch", "obj", "true"},
+		{"false", "sch.obj", "sch.bjo", "sch", "jbo", "false"},
+		{"false", "sch.obj", "sch.bjo", "hcs", "", "false"},
+		{"false", "sch.obj", "sch.bjo", "hcs", "jbo", "false"},
 
-		{"sch", "sch.obj", "sch", "", "true"},
-		{"sch", "sch.obj", "sch", "obj", "false"},
-		{"sch", "sch.obj", "hcs", "", "false"},
-		{"sch", "sch.obj", "hcs", "jbo", "false"},
+		{"false", "sch", "sch.obj", "sch", "", "true"},
+		{"false", "sch", "sch.obj", "sch", "obj", "false"},
+		{"false", "sch", "sch.obj", "hcs", "", "false"},
+		{"false", "sch", "sch.obj", "hcs", "jbo", "false"},
+
+		{"true", "sch\\.obj", "", "sch", "obj", "true"},
+		{"true", "sch\\.obj", "", "hcs", "jbo", "false"},
+		{"true", "sch\\.o.*", "", "sch", "obj", "true"},
+		{"true", "sch\\.j.*", "", "sch", "obj", "false"},
+		{"true", ".*", "", "sch", "obj", "true"},
 	}
 	for _, test := range tests {
 		crit := Criteria{
-			match: test[0],
-			skip:  test[1],
+			match:       test[1],
+			skip:        test[2],
+			regexpMatch: test[0] == "true",
+			exaConn:     s.exaConn,
 		}
-		exp := test[4]
-		got := fmt.Sprintf("%v", crit.matches(test[2], test[3]))
+		exp := test[5]
+		got := fmt.Sprintf("%v", crit.matches(test[3], test[4]))
 		s.Equal(exp, got)
 	}
 }
