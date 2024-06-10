@@ -56,6 +56,10 @@ type Conf struct {
 	// Skip is the inverse of Match.
 	// Any schema objects matching it will be skipped.
 	Skip string
+	// This indicates whether the Match and Skip patterns above
+	// should be interpreted as regular expressions. If true then
+	// it will be evaluated against each "schema.object" string in the database.
+	RegexpMatch bool
 
 	// If > 0 then tables with this many or fewer rows
 	// will have the their data backed up to CSV files.
@@ -103,7 +107,7 @@ func Backup(cfg Conf) error {
 	src := cfg.Source
 	dst := cfg.Destination
 	drop := cfg.DropExtras
-	crit := Criteria{cfg.Match, cfg.Skip}
+	crit := Criteria{cfg.Match, cfg.Skip, cfg.RegexpMatch, src}
 
 	// TODO capture and restore original values of these 2 settings
 	src.DisableAutoCommit()
@@ -186,8 +190,10 @@ func Backup(cfg Conf) error {
 }
 
 type Criteria struct {
-	match string
-	skip  string
+	match       string
+	skip        string
+	regexpMatch bool
+	exaConn     *exasol.Conn
 }
 
 /* Private routines */
@@ -220,22 +226,41 @@ func initLogging(logLevelStr string) error {
 }
 
 func (c *Criteria) getSQLCriteria() string {
-	whereClause := buildCriteria(c.match)
+	whereClause := buildCriteria(c.match, c.regexpMatch)
 	if c.skip != "" {
 		whereClause = fmt.Sprintf(
 			"(%s) AND NOT (%s)",
-			whereClause, buildCriteria(c.skip),
+			whereClause, buildCriteria(c.skip, c.regexpMatch),
 		)
 	}
 	return whereClause
 }
 
 func (c *Criteria) matches(schema, object string) bool {
-	return matchesCriteria(c.match, schema, object, false) &&
-		(c.skip == "" || !matchesCriteria(c.skip, schema, object, true))
+	return matchesCriteria(c.match, schema, object, c.regexpMatch, false, c.exaConn) &&
+		(c.skip == "" || !matchesCriteria(c.skip, schema, object, c.regexpMatch, true, c.exaConn))
 }
 
-func matchesCriteria(matchStr, schema, object string, skipping bool) bool {
+func matchesCriteria(
+	matchStr, schema, object string,
+	regexpMatch, skipping bool,
+	exaConn *exasol.Conn,
+) bool {
+
+	if regexpMatch {
+		// Go doesn't support negative lookahead regexps while Exasol does so
+		// we run the comparison in Exasol.
+		res, err := exaConn.FetchSlice(fmt.Sprintf(
+			`SELECT '%s.%s' REGEXP_LIKE '(?i)^%s$'`,
+			qStr(schema), qStr(object), qStr(matchStr),
+		))
+		if err != nil {
+			log.Errorf("Unable to match regexp: %s", err)
+			return false
+		}
+		return res[0][0].(bool)
+	}
+
 	// Convert wildcards to regexp wildcard match
 	for _, match := range strings.Split(matchStr, ",") {
 		parts := strings.Split(match, ".")
@@ -270,8 +295,12 @@ func matchesCriteria(matchStr, schema, object string, skipping bool) bool {
 	return false
 }
 
-func buildCriteria(argStr string) string {
-	// Convert wildcards to SQL wildcard match
+func buildCriteria(argStr string, regexpMatch bool) string {
+	if regexpMatch {
+		return fmt.Sprintf(`( CONCAT(local.s,'.',local.o) REGEXP_LIKE '(?i)%s' )`, qStr(argStr))
+	}
+
+	// Otherwise convert wildcards to SQL wildcard match
 	arg := regexp.MustCompile(`\*`).ReplaceAllString(argStr, "%")
 	var whereClause []string
 	for _, st := range strings.Split(arg, ",") {
