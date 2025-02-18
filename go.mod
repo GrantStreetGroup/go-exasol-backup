@@ -1,4 +1,4 @@
-module bitbucket.grantstreet.com/GITHUB/go-exasol-backup
+module github.com/GrantStreetGroup/go-exasol-backup
 
 go 1.22.0
 
