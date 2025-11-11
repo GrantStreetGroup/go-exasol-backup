@@ -56,13 +56,16 @@ func getSchemasToBackup(conn *exasol.Conn, crit Criteria) ([]*schema, []dbObj, e
 			   schema_comment,
 			   raw_object_size_limit
 		FROM exa_schemas AS s
-		JOIN exa_all_object_sizes AS os
-		  ON s.schema_name = os.object_name
-		 AND os.object_type = 'SCHEMA'
-		WHERE %s
-		  AND s.schema_is_virtual = FALSE
+		JOIN (
+			SELECT object_name AS s,
+		           object_name AS o,
+			       raw_object_size_limit
+			FROM exa_all_object_sizes
+			WHERE object_type = 'SCHEMA' AND %s
+		) AS os ON s.schema_name = os.s
+		WHERE s.schema_is_virtual = FALSE AND %s
 		ORDER BY local.s
-		`, crit.getSQLCriteria(),
+		`, crit.getSQLCriteria(), crit.getSQLCriteria(),
 	)
 	res, err := conn.FetchSlice(sql)
 	if err != nil {
