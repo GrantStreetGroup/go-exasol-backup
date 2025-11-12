@@ -241,6 +241,8 @@ func (c *Criteria) matches(schema, object string) bool {
 		(c.skip == "" || !matchesCriteria(c.skip, schema, object, c.regexpMatch, true, c.exaConn))
 }
 
+var matchCache = map[string]any{}
+
 func matchesCriteria(
 	matchStr, schema, object string,
 	regexpMatch, skipping bool,
@@ -250,15 +252,25 @@ func matchesCriteria(
 	if regexpMatch {
 		// Go doesn't support negative lookahead regexps while Exasol does so
 		// we run the comparison in Exasol.
-		res, err := exaConn.FetchSlice(fmt.Sprintf(
-			`SELECT '%s.%s' REGEXP_LIKE '(?i)^%s$'`,
-			qStr(schema), qStr(object), qStr(matchStr),
-		))
-		if err != nil {
-			log.Errorf("Unable to match regexp: %s", err)
-			return false
+		if regexp.MustCompile(`\(\?!`).MatchString(matchStr) {
+			// But this is relatively slow so we cache the results.
+			cacheKey := strings.Join([]string{matchStr, schema, object}, "|")
+			if cachedRes := matchCache[cacheKey]; cachedRes != nil {
+				return cachedRes.(bool)
+			}
+			res, err := exaConn.FetchSlice(fmt.Sprintf(
+				`SELECT '%s.%s' REGEXP_LIKE '(?i)^%s$'`,
+				qStr(schema), qStr(object), qStr(matchStr),
+			))
+			if err != nil {
+				log.Errorf("Unable to match regexp: %s", err)
+				return false
+			}
+			matchCache[cacheKey] = res[0][0]
+			return matchCache[cacheKey].(bool)
+		} else {
+			return regexp.MustCompile(`(?i)^` + matchStr + `$`).MatchString(schema + "." + object)
 		}
-		return res[0][0].(bool)
 	}
 
 	// Convert wildcards to regexp wildcard match
@@ -297,6 +309,15 @@ func matchesCriteria(
 
 func buildCriteria(argStr string, regexpMatch bool) string {
 	if regexpMatch {
+		// Split apart the argStr into schema and object parts if possible
+		// because it speeds up the match considerably
+		if strings.Count(argStr, "\\.") == 1 {
+			parts := strings.Split(argStr, "\\.")
+			return fmt.Sprintf(
+				`( local.s REGEXP_LIKE '(?i)^%s$' AND local.o REGEXP_LIKE '(?i)^%s$' )`,
+				qStr(parts[0]), qStr(parts[1]),
+			)
+		}
 		return fmt.Sprintf(`( CONCAT(local.s,'.',local.o) REGEXP_LIKE '(?i)%s' )`, qStr(argStr))
 	}
 
