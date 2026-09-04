@@ -118,7 +118,6 @@ func backupRestrictedObjectPrivs(src *exasol.Conn, dst string, grantees []string
 	}
 	for _, row := range res {
 		objType := row[2].(string)
-		forObjType := row[5].(string)
 		privilege := row[6].(string)
 		grantee := row[7].(string)
 
@@ -128,17 +127,23 @@ func backupRestrictedObjectPrivs(src *exasol.Conn, dst string, grantees []string
 		} else {
 			object = row[0].(string) + "].[" + row[1].(string)
 		}
-		var forObject string
-		if row[3] == nil {
-			forObject = row[4].(string)
-		} else {
-			forObject = row[3].(string) + "].[" + row[4].(string)
+
+		sql := fmt.Sprintf(`GRANT %s ON %s [%s]`, privilege, objType, object)
+
+		// The privilege may not be qualified by an object.
+		// e.g. GRANT ACCESS ON CONNECTION conn TO role
+		if row[5] != nil {
+			forObjType := row[5].(string)
+			var forObject string
+			if row[3] == nil {
+				forObject = row[4].(string)
+			} else {
+				forObject = row[3].(string) + "].[" + row[4].(string)
+			}
+			sql += fmt.Sprintf(` FOR %s [%s]`, forObjType, forObject)
 		}
 
-		sql := fmt.Sprintf(
-			`GRANT %s ON %s [%s] FOR %s [%s] TO [%s];`+"\n",
-			privilege, objType, object, forObjType, forObject, grantee,
-		)
+		sql += fmt.Sprintf(" TO [%s];\n", grantee)
 		err = appendToObjFile(dst, grantee, sql)
 		if err != nil {
 			return err
