@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/GrantStreetGroup/go-exasol-client"
 	"github.com/sirupsen/logrus"
@@ -400,6 +401,37 @@ SCHEMA:
 
 func qStr(str string) string {
 	return exasol.QuoteStr(str)
+}
+
+// If another session drops an object while we are reading the
+// metadata system tables Exasol fails the whole query with a
+// "Trying to access already dropped object" error. The object is
+// gone from the catalog by the time we run the query again so
+// retrying gets us a consistent snapshot without it.
+var droppedObjectError = regexp.MustCompile(`(?i)already dropped object`)
+
+var (
+	maxFetchAttempts = 5
+	fetchRetryDelay  = 5 * time.Second
+)
+
+func fetchSlice(conn *exasol.Conn, sql string) ([][]interface{}, error) {
+	return retryOnDroppedObject(func() ([][]interface{}, error) {
+		return conn.FetchSlice(sql)
+	})
+}
+
+func retryOnDroppedObject(fetch func() ([][]interface{}, error)) ([][]interface{}, error) {
+	for attempt := 1; ; attempt++ {
+		res, err := fetch()
+		if err == nil ||
+			attempt >= maxFetchAttempts ||
+			!droppedObjectError.MatchString(err.Error()) {
+			return res, err
+		}
+		log.Warningf("Retrying metadata query, an object was dropped underneath us: %s", err)
+		time.Sleep(fetchRetryDelay)
+	}
 }
 
 func setCapabilities(conn *exasol.Conn) {

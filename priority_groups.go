@@ -53,7 +53,7 @@ func getPriorityGroupsToBackup(conn *exasol.Conn) ([]*priorityGroup, error) {
 		FROM exa_priority_groups
 		ORDER BY priority_group_name
 	`
-	res, err := conn.FetchSlice(sql)
+	res, err := fetchSlice(conn, sql)
 	if err != nil {
 		return nil, fmt.Errorf("Unable to get priority groups to backup: %s", err)
 	}

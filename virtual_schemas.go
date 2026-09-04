@@ -80,7 +80,7 @@ func getVirtualSchemasToBackup(conn *exasol.Conn, crit Criteria) ([]*virtual_sch
 		ORDER BY local.s
 		`, adapterColumn, crit.getSQLCriteria(),
 	)
-	res, err := conn.FetchSlice(sql)
+	res, err := fetchSlice(conn, sql)
 	if err != nil {
 		return nil, nil, fmt.Errorf("Unable to get virtual schemas: %s", err)
 	}
@@ -113,7 +113,7 @@ func addVirtualSchemaProps(conn *exasol.Conn, schemas []*virtual_schema, crit Cr
 		ORDER BY schema_name, property_name
 		`, crit.getSQLCriteria(),
 	)
-	res, err := conn.FetchSlice(sql)
+	res, err := fetchSlice(conn, sql)
 	if err != nil {
 		return fmt.Errorf("Unable to get virtual schema properties: %s", err)
 	}

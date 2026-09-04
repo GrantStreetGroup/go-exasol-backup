@@ -43,7 +43,7 @@ func backupConnectionPrivs(src *exasol.Conn, dst string, grantees []string) erro
 		ORDER BY 1, 2
 		`, strings.Join(grantees, ","),
 	)
-	res, err := src.FetchSlice(sql)
+	res, err := fetchSlice(src, sql)
 	if err != nil {
 		return fmt.Errorf("Unable to get connection privs: %s", err)
 	}
@@ -75,7 +75,7 @@ func backupObjectPrivs(src *exasol.Conn, dst string, grantees []string) error {
 		ORDER BY 1, 2, 3, 4, 5
 		`, strings.Join(grantees, ","),
 	)
-	res, err := src.FetchSlice(sql)
+	res, err := fetchSlice(src, sql)
 	if err != nil {
 		return fmt.Errorf("Unable to get object privs: %s", err)
 	}
@@ -112,7 +112,7 @@ func backupRestrictedObjectPrivs(src *exasol.Conn, dst string, grantees []string
 		ORDER BY 1, 2, 3, 4, 5, 6, 7, 8
 		`, strings.Join(grantees, ","),
 	)
-	res, err := src.FetchSlice(sql)
+	res, err := fetchSlice(src, sql)
 	if err != nil {
 		return fmt.Errorf("Unable to get restricted object privs: %s", err)
 	}
@@ -162,7 +162,7 @@ func backupRolePrivs(src *exasol.Conn, dst string, grantees []string) error {
 		ORDER BY 1, 2
 		`, strings.Join(grantees, ","),
 	)
-	res, err := src.FetchSlice(sql)
+	res, err := fetchSlice(src, sql)
 	if err != nil {
 		return fmt.Errorf("Unable to get role privs: %s", err)
 	}
@@ -194,7 +194,7 @@ func backupSystemPrivs(src *exasol.Conn, dst string, grantees []string) error {
 		ORDER BY 1, 2
 		`, strings.Join(grantees, ","),
 	)
-	res, err := src.FetchSlice(sql)
+	res, err := fetchSlice(src, sql)
 	if err != nil {
 		return fmt.Errorf("Unable to get sys privs: %s", err)
 	}
@@ -226,7 +226,7 @@ func backupImpersonationPrivs(src *exasol.Conn, dst string, grantees []string) e
 		ORDER BY 1, 2
 		`, strings.Join(grantees, ","),
 	)
-	res, err := src.FetchSlice(sql)
+	res, err := fetchSlice(src, sql)
 	if err != nil {
 		return fmt.Errorf("Unable to get impersonation privs: %s", err)
 	}
@@ -256,7 +256,7 @@ func backupSchemaOwners(src *exasol.Conn, dst string, grantees []string) error {
 		ORDER BY 1, 2
 		`, strings.Join(grantees, ","),
 	)
-	res, err := src.FetchSlice(sql)
+	res, err := fetchSlice(src, sql)
 	if err != nil {
 		return fmt.Errorf("Unable to get schema owner: %s", err)
 	}

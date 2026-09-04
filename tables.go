@@ -187,7 +187,7 @@ func getTablesToBackup(conn *exasol.Conn, crit Criteria) ([]*table, []dbObj, err
 		crit.getSQLCriteria(),
 		crit.getSQLCriteria(),
 	)
-	res, err := conn.FetchSlice(sql)
+	res, err := fetchSlice(conn, sql)
 	if err != nil {
 		return nil, nil, fmt.Errorf("Unable to get tables: %s", err)
 	}
@@ -230,7 +230,7 @@ func addTableColumns(conn *exasol.Conn, tables []*table, crit Criteria) error {
 		ORDER BY column_schema, column_table, column_ordinal_position
 		`, crit.getSQLCriteria(),
 	)
-	res, err := conn.FetchSlice(sql)
+	res, err := fetchSlice(conn, sql)
 	if err != nil {
 		return fmt.Errorf("Unable to get table columns: %s", err)
 	}
@@ -305,7 +305,7 @@ func addTableConstraints(conn *exasol.Conn, tables []*table, crit Criteria) erro
 		ORDER BY local.s, local.o, con.constraint_name
 		`, crit.getSQLCriteria(), crit.getSQLCriteria(),
 	)
-	res, err := conn.FetchSlice(sql)
+	res, err := fetchSlice(conn, sql)
 	if err != nil {
 		return fmt.Errorf("Unable to get table constraints: %s", err)
 	}
