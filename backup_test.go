@@ -635,6 +635,7 @@ func (s *testSuite) TestPrivileges() {
 		"GRANT CONNECTION CONN TO [JOE] WITH ADMIN OPTION",                   // Connection Priv
 		"GRANT ACCESS ON CONNECTION [CONN] FOR SCRIPT [test].[SCR] TO [JOE]", // Connection Restricted Priv
 		"GRANT ACCESS ON CONNECTION [CONN] FOR SCHEMA [test] TO [JOE]",       // Connection Restricted Priv
+		"GRANT ACCESS ON CONNECTION [CONN] TO [JOE]",                         // Unqualified Connection Restricted Priv
 		"GRANT SELECT ON SCHEMA [test] TO [JOE]",                             // Object Priv
 		"GRANT [DBA] TO [JOE] WITH ADMIN OPTION",                             // Role Priv
 		"GRANT SELECT ANY TABLE TO [JOE] WITH ADMIN OPTION",                  // System Priv
