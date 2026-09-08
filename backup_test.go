@@ -19,6 +19,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"strings"
 	"testing"
@@ -724,5 +725,50 @@ func (s *testSuite) TestCriteria() {
 		exp := test[5]
 		got := fmt.Sprintf("%v", crit.matches(test[3], test[4]))
 		s.Equal(exp, got)
+	}
+}
+
+func TestRetryOnDroppedObject(t *testing.T) {
+	origDelay := fetchRetryDelay
+	fetchRetryDelay = 0
+	defer func() { fetchRetryDelay = origDelay }()
+
+	dropped := fmt.Errorf(
+		"Unable to Fetch: Server Error: Trying to access already dropped object with id 58292931617792!",
+	)
+	other := fmt.Errorf("Unable to Fetch: Server Error: syntax error")
+	want := [][]interface{}{{"OK"}}
+
+	// It retries until the object is gone from the catalog
+	attempts := 0
+	got, err := retryOnDroppedObject(func() ([][]interface{}, error) {
+		attempts++
+		if attempts < maxFetchAttempts {
+			return nil, dropped
+		}
+		return want, nil
+	})
+	if err != nil || !reflect.DeepEqual(got, want) || attempts != maxFetchAttempts {
+		t.Errorf("Got %v, %v after %d attempts", got, err, attempts)
+	}
+
+	// It gives up eventually rather than looping forever
+	attempts = 0
+	_, err = retryOnDroppedObject(func() ([][]interface{}, error) {
+		attempts++
+		return nil, dropped
+	})
+	if err != dropped || attempts != maxFetchAttempts {
+		t.Errorf("Got %v after %d attempts", err, attempts)
+	}
+
+	// Other errors are returned immediately
+	attempts = 0
+	_, err = retryOnDroppedObject(func() ([][]interface{}, error) {
+		attempts++
+		return nil, other
+	})
+	if err != other || attempts != 1 {
+		t.Errorf("Got %v after %d attempts", err, attempts)
 	}
 }

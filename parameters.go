@@ -52,7 +52,7 @@ func getParametersToBackup(conn *exasol.Conn) ([]*parameter, error) {
 		WHERE parameter_name != 'NICE'
 		ORDER BY parameter_name
 	`
-	res, err := conn.FetchSlice(sql)
+	res, err := fetchSlice(conn, sql)
 	if err != nil {
 		return nil, fmt.Errorf("Unable to get parameters to backup: %s", err)
 	}

@@ -68,7 +68,7 @@ func getRolesToBackup(conn *exasol.Conn) ([]*role, error) {
 		ORDER BY local.s`,
 		groupType,
 	)
-	res, err := conn.FetchSlice(sql)
+	res, err := fetchSlice(conn, sql)
 	if err != nil {
 		return nil, fmt.Errorf("Unable to get roles: %s", err)
 	}

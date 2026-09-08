@@ -77,7 +77,7 @@ func getUsersToBackup(conn *exasol.Conn) ([]*user, error) {
 		ORDER BY local.s`,
 		groupType,
 	)
-	res, err := conn.FetchSlice(sql)
+	res, err := fetchSlice(conn, sql)
 	if err != nil {
 		return nil, fmt.Errorf("Unable to get users: %s", err)
 	}

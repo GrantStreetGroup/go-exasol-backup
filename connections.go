@@ -54,7 +54,7 @@ func getConnectionsToBackup(conn *exasol.Conn) ([]*connection, error) {
 		FROM exa_dba_connections
 		ORDER BY connection_name
 	`
-	res, err := conn.FetchSlice(sql)
+	res, err := fetchSlice(conn, sql)
 	if err != nil {
 		return nil, fmt.Errorf("Unable to get connections to backup: %s", err)
 	}

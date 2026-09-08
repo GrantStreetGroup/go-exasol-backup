@@ -62,7 +62,7 @@ func getConsumerGroupsToBackup(conn *exasol.Conn) ([]*consumerGroup, error) {
 		FROM exa_parameters
 		WHERE parameter_name = 'DEFAULT_CONSUMER_GROUP'
 	`
-	res, err := conn.FetchSlice(sql)
+	res, err := fetchSlice(conn, sql)
 	if err != nil {
 		return nil, fmt.Errorf("Unable to get default consumer group: %s", err)
 	}
@@ -81,7 +81,7 @@ func getConsumerGroupsToBackup(conn *exasol.Conn) ([]*consumerGroup, error) {
 		FROM exa_consumer_groups
 		ORDER BY consumer_group_name
 	`
-	res, err = conn.FetchSlice(sql)
+	res, err = fetchSlice(conn, sql)
 	if err != nil {
 		return nil, fmt.Errorf("Unable to get consumer groups to backup: %s", err)
 	}

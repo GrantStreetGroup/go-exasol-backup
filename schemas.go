@@ -67,7 +67,7 @@ func getSchemasToBackup(conn *exasol.Conn, crit Criteria) ([]*schema, []dbObj, e
 		ORDER BY local.s
 		`, crit.getSQLCriteria(), crit.getSQLCriteria(),
 	)
-	res, err := conn.FetchSlice(sql)
+	res, err := fetchSlice(conn, sql)
 	if err != nil {
 		return nil, nil, fmt.Errorf("Unable to get schemas: %s", err)
 	}

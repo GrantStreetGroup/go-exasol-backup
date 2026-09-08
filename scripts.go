@@ -59,7 +59,7 @@ func getScriptsToBackup(conn *exasol.Conn, crit Criteria) ([]*script, []dbObj, e
 		ORDER BY local.s, local.o
 		`, crit.getSQLCriteria(),
 	)
-	res, err := conn.FetchSlice(sql)
+	res, err := fetchSlice(conn, sql)
 	if err != nil {
 		return nil, nil, fmt.Errorf("Unable to get scripts: %s", err)
 	}

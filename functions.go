@@ -59,7 +59,7 @@ func getFunctionsToBackup(conn *exasol.Conn, crit Criteria) ([]*function, []dbOb
 		ORDER BY local.s, local.o
 		`, crit.getSQLCriteria(),
 	)
-	res, err := conn.FetchSlice(sql)
+	res, err := fetchSlice(conn, sql)
 	if err != nil {
 		return nil, nil, fmt.Errorf("Unable to get functions to backup: %s", err)
 	}

@@ -82,7 +82,7 @@ func getViewsToBackup(conn *exasol.Conn, crit Criteria) ([]*view, []dbObj, error
 		ORDER BY local.s, local.o
 		`, crit.getSQLCriteria(),
 	)
-	res, err := conn.FetchSlice(sql)
+	res, err := fetchSlice(conn, sql)
 	if err != nil {
 		return nil, nil, fmt.Errorf("Unable to get views: %s", err)
 	}
@@ -129,7 +129,7 @@ func shouldBackupViewData(conn *exasol.Conn, v *view, maxRows int) (bool, error)
 		return false, nil
 	}
 	sql := fmt.Sprintf(`SELECT COUNT(*) FROM [%s].[%s]`, v.schema, v.name)
-	res, err := conn.FetchSlice(sql)
+	res, err := fetchSlice(conn, sql)
 	if err != nil {
 		return false, fmt.Errorf("Unable to number of view rows: %s", err)
 	}
