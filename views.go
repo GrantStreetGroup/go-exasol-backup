@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/GrantStreetGroup/go-exasol-client"
@@ -143,9 +145,14 @@ func readViewData(conn *exasol.Conn, v *view, data chan<- []byte, errors chan<- 
 		wg.Done()
 	}()
 
+	orderBy, err := getViewOrderBy(conn, v)
+	if err != nil {
+		errors <- err
+		return
+	}
 	exportSQL := fmt.Sprintf(
-		"EXPORT (SELECT * FROM [%s].[%s]) INTO CSV AT '%%s' FILE 'data.csv'",
-		v.schema, v.name,
+		"EXPORT (SELECT * FROM [%s].[%s]%s) INTO CSV AT '%%s' FILE 'data.csv'",
+		v.schema, v.name, orderBy,
 	)
 	res := conn.StreamQuery(exportSQL)
 	if res.Error != nil {
@@ -155,6 +162,29 @@ func readViewData(conn *exasol.Conn, v *view, data chan<- []byte, errors chan<- 
 	for d := range res.Data {
 		data <- d
 	}
+}
+
+func getViewOrderBy(conn *exasol.Conn, v *view) (string, error) {
+	sql := `
+		SELECT COUNT(*)
+		FROM exa_all_columns
+		WHERE column_object_type = 'VIEW'
+		  AND column_schema = ?
+		  AND column_table = ?
+		`
+	res, err := fetchSlice(conn, sql, []interface{}{v.schema, v.name})
+	if err != nil {
+		return "", fmt.Errorf("Unable to get columns for view %s.%s: %s", v.schema, v.name, err)
+	}
+	numCols := int(res[0][0].(float64))
+	if numCols == 0 {
+		return "", nil
+	}
+	positions := make([]string, numCols)
+	for i := range positions {
+		positions[i] = strconv.Itoa(i + 1)
+	}
+	return " ORDER BY " + strings.Join(positions, ","), nil
 }
 
 func writeViewData(dst string, v *view, data <-chan []byte, errors chan<- error, wg *sync.WaitGroup) {
