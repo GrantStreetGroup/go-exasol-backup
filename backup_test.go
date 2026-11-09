@@ -333,7 +333,7 @@ func (s *testSuite) TestViews() {
 		  (c COMMENT IS 'column comment') AS
 			SELECT 'Hi Mom!!' AS col
 		  COMMENT IS 'view comment'`
-	view2SQL := `CREATE OR REPLACE FORCE VIEW "test"."V2" AS SELECT 1 c`
+	view2SQL := `CREATE OR REPLACE FORCE VIEW "test"."V2" AS SELECT * FROM (VALUES (2,1), (1,3), (1,2)) AS t(c,d)`
 	s.execute(openSchemaSQL, view1SQL, view2SQL)
 	s.backup(Conf{MaxViewRows: 0}, VIEWS)
 	s.expect(dt{
@@ -356,7 +356,7 @@ func (s *testSuite) TestViews() {
 					"V 1.sql": openSchemaSQL + view1SQL + ";\n",
 					"V 1.csv": "\"Hi Mom!!\"\n",
 					"V2.sql":  openSchemaSQL + view2SQL + ";\n",
-					"V2.csv":  "1\n",
+					"V2.csv":  "1,2\n1,3\n2,1\n",
 				},
 			},
 		},

@@ -415,9 +415,9 @@ var (
 	fetchRetryDelay  = 5 * time.Second
 )
 
-func fetchSlice(conn *exasol.Conn, sql string) ([][]interface{}, error) {
+func fetchSlice(conn *exasol.Conn, sql string, args ...interface{}) ([][]interface{}, error) {
 	return retryOnDroppedObject(func() ([][]interface{}, error) {
-		return conn.FetchSlice(sql)
+		return conn.FetchSlice(sql, args...)
 	})
 }
 
