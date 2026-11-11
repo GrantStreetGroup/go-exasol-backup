@@ -391,6 +391,39 @@ func (s *testSuite) TestViews() {
 	})
 }
 
+func (s *testSuite) TestViewDataLimits() {
+	openSchemaSQL := "OPEN SCHEMA [test];\n"
+	vlSQL := `CREATE OR REPLACE FORCE VIEW "test"."VL" AS SELECT * FROM (VALUES (2,1), (1,3), (1,2)) AS t(c,d)`
+	veSQL := `CREATE OR REPLACE FORCE VIEW "test"."VE" AS SELECT 1 AS c FROM DUAL WHERE FALSE`
+	vsSQL := `CREATE OR REPLACE FORCE VIEW "test"."VS" AS SELECT * FROM (VALUES ('a,b'), ('line1
+line2'), ('say "hi"')) AS t(c)`
+	s.execute(openSchemaSQL, vlSQL, veSQL, vsSQL)
+	sqlFiles := dt{
+		"VL.sql": openSchemaSQL + vlSQL + ";\n",
+		"VE.sql": openSchemaSQL + veSQL + ";\n",
+		"VS.sql": openSchemaSQL + vsSQL + ";\n",
+	}
+
+	// Views with more rows than the limit and the empty view get no .csv
+	// (expect consumes the map it's given so keep a copy for below)
+	views := dt{}
+	for name, content := range sqlFiles {
+		views[name] = content
+	}
+	s.backup(Conf{MaxViewRows: 2}, VIEWS)
+	s.expect(dt{"schemas": dt{"test": dt{"views": sqlFiles}}})
+
+	// Views within the limit get sorted .csv data
+	views["VL.csv"] = "1,2\n1,3\n2,1\n"
+	views["VS.csv"] = `"a,b"
+"line1
+line2"
+"say ""hi"""
+`
+	s.backup(Conf{MaxViewRows: 3}, VIEWS)
+	s.expect(dt{"schemas": dt{"test": dt{"views": views}}})
+}
+
 func (s *testSuite) TestFunctions() {
 	openSchemaSQL := "OPEN SCHEMA [test];"
 	func1SQL := `--/
@@ -770,5 +803,106 @@ func TestRetryOnDroppedObject(t *testing.T) {
 	})
 	if err != other || attempts != 1 {
 		t.Errorf("Got %v after %d attempts", err, attempts)
+	}
+}
+
+func TestTotalRowsStripper(t *testing.T) {
+	tests := []struct {
+		name      string
+		in        string
+		wantOut   string
+		wantTotal int
+	}{
+		{
+			"simple",
+			"2,a,b\n2,c,d\n",
+			"a,b\nc,d\n",
+			2,
+		},
+		{
+			"quoted comma",
+			"1,\"a,b\",c\n",
+			"\"a,b\",c\n",
+			1,
+		},
+		{
+			"embedded newline in quotes",
+			"1,\"a\nb\",c\n2,d,e\n",
+			"\"a\nb\",c\nd,e\n",
+			1,
+		},
+		{
+			"double quote escapes",
+			"3,\"a\"\"b\"\n3,\"\"\"\"\n3,x\n",
+			"\"a\"\"b\"\n\"\"\"\"\nx\n",
+			3,
+		},
+		{
+			"field starting with digits",
+			"1,123,456\n",
+			"123,456\n",
+			1,
+		},
+		{
+			"CRLF line ends",
+			"2,a\r\n2,b\r\n",
+			"a\r\nb\r\n",
+			2,
+		},
+		{
+			"no trailing newline",
+			"4,a,b",
+			"a,b",
+			4,
+		},
+		{
+			"multi digit total",
+			"12,a\n12,b\n",
+			"a\nb\n",
+			12,
+		},
+	}
+	bytewise := func(s string) [][]byte {
+		chunks := make([][]byte, len(s))
+		for i := range chunks {
+			chunks[i] = []byte{s[i]}
+		}
+		return chunks
+	}
+	strip := func(chunks ...[]byte) (string, int, error) {
+		ts := newTotalRowsStripper()
+		var out []byte
+		var err error
+		for _, chunk := range chunks {
+			o, e := ts.strip(chunk)
+			out = append(out, o...)
+			if e != nil && err == nil {
+				err = e
+			}
+		}
+		return string(out), ts.total, err
+	}
+
+	for _, tc := range tests {
+		for _, chunks := range [][][]byte{{[]byte(tc.in)}, bytewise(tc.in)} {
+			out, total, err := strip(chunks...)
+			label := fmt.Sprintf("%s chunks=%d", tc.name, len(chunks))
+			if err != nil {
+				t.Errorf("%s: unexpected error %v", label, err)
+			} else if out != tc.wantOut || total != tc.wantTotal {
+				t.Errorf("%s: got out=%q total=%d, want out=%q total=%d",
+					label, out, total, tc.wantOut, tc.wantTotal)
+			}
+		}
+	}
+
+	// A non-numeric first field is an error
+	for _, in := range []string{"x,a\n", ",a\n"} {
+		if _, _, err := strip([]byte(in)); err == nil {
+			t.Errorf("in=%q: expected error", in)
+		}
+		if _, _, err := strip(bytewise(in)...); err == nil {
+			t.Errorf("in=%q bytewise: expected error", in)
+		}
 	}
 }
